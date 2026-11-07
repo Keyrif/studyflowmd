@@ -20,7 +20,7 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 
 ## Optimizarea consumului de tokenuri AI
 
-Telefoanele moderne fac fotografii foarte detaliate, la rezoluții de 4K sau mai mari. Dar o fotografie cu o rezolutie mai mare nu înseamnă mai multă informație utilă pentru AI. Cu cât rezoluția e mai mare cu atât risipa de tokenuri e mai puternică.
+Telefoanele moderne fac fotografii foarte detaliate, la rezoluții de 4K sau mai mari. Dar o fotografie cu o rezolutie mai mare nu înseamnă mai multă informație utilă pentru AI.
 
 Modelele AI procesează imaginile împărțindu-le în secțiuni mici, numite **tiles/patches**. Consumul de tokenuri depinde de rezoluție și de setările de procesare, nu doar de numărul de cuvinte de pe pagină. O fotografie de rezoluție înaltă care conține doar două propoziții consuma mai multe tokenuri decât trimiterea acelorași propoziții ca text simplu.
 
@@ -38,11 +38,11 @@ StudyFlowMD este conceput să extragă textul folosind **OCR (recunoașterea tex
 
 2. **Consum redus de tokenuri:** Trimiterea textului extras consuma mai puține tokenuri decât procesarea fotografiilor originale. Acest lucru reduce costurile atunci când se folosește un API plătit.
 
-## Exemplu vizual: fotografie a unui caiet, împărțirea fotografiei în **tiles/patches**:
-- 🟧 **Conținut irelevant:** fundalul și obiectele din jurul caietului.
-- 🟦 **Puțin text și mult spațiu gol:** ocupă o parte din imagine, deși conțin puțină informație utilă.
+## Exemplu ilustrativ: fotografie a unui caiet, împărțirea fotografiei în **tiles/patches**:
+- 🟧 **Zone cu conținut irelevant:** fundalul și obiectele din jurul caietului.
+- 🟦 **Zone cu puțin text și mult spațiu gol:** ocupă o parte din imagine, deși conțin puțină informație utilă.
 
 Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin OCR permite trimiterea notițelor fără fundalul și spațiile goale din fotografie.
 
+<img width="825" height="1098" alt="2222" src="https://github.com/user-attachments/assets/5fd8d21e-9573-410b-b2d0-c03b6848519b" />
 
-<img width="826" height="1100" alt="img" src="https://github.com/user-attachments/assets/22608d05-87b5-4aa4-84ab-6a648a50c0bb" />
