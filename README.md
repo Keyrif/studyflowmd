@@ -10,13 +10,12 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 
 
 ## Funcționalități
-- Dashboard Interactiv: Vizualizarea examenelor, parțialelor, termenelor de predare și progresului task-urilor într-un singur loc.
-- Sistem de Task-uri: Crearea, editarea și ștergerea temelor și a task-urilor de studiu. Stabilirea priorităților, a termenelor-limită și a stării de finalizare.
-- Gestionarea Examenelor și Parțialelor: Organizarea datelor examenelor și parțialelor pe materii, cu notițe despre subiectele de recapitulat.
-- Notificări în Fundal: Remindere automate pentru termenele-limită, examenele și parțialele care se apropie, gestionate prin Celery & Redis.
-- Gestionarea Utilizatorilor: Înregistrare, autentificare și spații personale pentru gestionarea materiilor, task-urilor și notițelor.
-- Conversia Notițelor: Încărcarea fotografiilor cu notițe scrise de mână, extragerea textului prin OCR și verificarea, editarea sau descărcarea acestuia în format Markdown.
-
+- **Dashboard Interactiv**: Vizualizarea și gestionarea examenelor, parțialelor, termenelor de predare și progresului task-urilor într-un singur loc.
+- **Sistem de Task-uri**: Crearea, editarea și ștergerea temelor și a task-urilor de studiu.
+- **Notificări în Fundal**: Remindere automate pentru termenele limită, examenele și parțialele care se apropie, gestionate prin Celery & Redis.
+- **Gestionarea Utilizatorilor**: Înregistrare, autentificare și spații personale pentru gestionarea materiilor, task-urilor și notițelor.
+- **Conversia Notițelor**: Încărcarea fotografiilor cu notițe scrise de mână, extragerea textului prin OCR și verificarea, editarea sau descărcarea acestuia în text în format Markdown.
+- **Partajarea Notițelor**: Generarea unui link prin care studenții pot oferi colegilor acces la notițele lor, cu posibilitatea de a revoca accesul ulterior.
 
 ## Optimizarea consumului de tokenuri AI
 Telefoanele moderne fac fotografii foarte detaliate, la rezoluții de 4K sau mai mari. Dar o fotografie cu o rezolutie mai mare nu înseamnă mai multă informație utilă pentru AI.
@@ -29,7 +28,7 @@ Imaginează-ți că te întorci din vacanță și împrumuți caietul unui coleg
 
 Trimiterea directă a fotografiilor presupune procesarea imaginilor paginilor, inclusiv a spațiilor goale, a marginilor și a liniilor caietului.
 
-StudyFlowMD este conceput să extragă textul folosind **OCR (Optical Character Recognition)** și să îl salveze în format Markdown: text simplu, cu formatare pentru titluri și liste. Poți apoi reutiliza notițele pentru rezumate, explicații și întrebări de recapitulare, fără să trimiți fotografiile de fiecare dată.
+**StudyFlowMD** este conceput să extragă textul folosind **OCR (Optical Character Recognition)** și să îl salveze în format Markdown: text simplu, cu formatare pentru titluri și liste. Poți apoi reutiliza notițele pentru rezumate, explicații și întrebări de recapitulare.
 
 
 ## Ce probleme rezolvă?
@@ -47,6 +46,6 @@ Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin
 <img width="825" height="1098" alt="2222" src="https://github.com/user-attachments/assets/5fd8d21e-9573-410b-b2d0-c03b6848519b" />
 
 ## Avantaj pentru modelele AI locale
-Multe modele populare care rulează local, precum Qwen3, Llama 3.1 și DeepSeek-R1, acceptă doar text, fără posibilitatea de a interpreta direct imagini.
+Multe modele populare care rulează local, precum **Qwen3**, **Llama 3.1** și **DeepSeek-R1**, acceptă doar text, fără posibilitatea de a interpreta direct imagini.
 
-Prin extragerea notițelor cu OCR și salvarea lor în text, StudyFlowMD permite folosirea acestora și cu modele fără suport pentru imagini. Studentul poate importa textul într-un model local pentru explicații, rezumate și întrebări de recapitulare.
+Prin extragerea notițelor cu **OCR** și salvarea lor în text, **StudyFlowMD** permite folosirea acestora și cu modele fără suport pentru imagini. Studentul poate importa textul într-un model local pentru explicații, rezumate și întrebări de recapitulare.
