@@ -1,16 +1,15 @@
-z## StudyFlowMD
-O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau scrise in format digital , în text markdown pentru o utilizare eficientă a tokenurilor AI.
+## StudyFlowMD
+O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau în format digital, în text Markdown pentru un consum eficient de tokenuri și utilizarea lor inclusiv cu modele AI locale fără suport pentru imagini.
 
 ## Tehnologii Utilizate
+- **Backend**: Django (Python 3.10+)
+- **Frontend**: JavaScript (ES6+), Bootstrap 5, CSS3 Custom Styles
+- **Bază de date**: PostgreSQL
+- **Task Queue**: Celery & Redis (pentru procesări asincrone)
+- **Containerizare**: Docker & Docker Compose
 
-- Backend: Django (Python 3.10+)
-- Frontend: JavaScript (ES6+), Bootstrap 5, CSS3 Custom Styles
-- Bază de date: PostgreSQL
-- Task Queue: Celery & Redis (pentru procesări asincrone)
-- Containerizare: Docker & Docker Compose
 
 ## Funcționalități
-
 - Dashboard Interactiv: Vizualizarea examenelor, parțialelor, termenelor de predare și progresului task-urilor într-un singur loc.
 - Sistem de Task-uri: Crearea, editarea și ștergerea temelor și a task-urilor de studiu. Stabilirea priorităților, a termenelor-limită și a stării de finalizare.
 - Gestionarea Examenelor și Parțialelor: Organizarea datelor examenelor și parțialelor pe materii, cu notițe despre subiectele de recapitulat.
@@ -18,8 +17,8 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 - Gestionarea Utilizatorilor: Înregistrare, autentificare și spații personale pentru gestionarea materiilor, task-urilor și notițelor.
 - Conversia Notițelor: Încărcarea fotografiilor cu notițe scrise de mână, extragerea textului prin OCR și verificarea, editarea sau descărcarea acestuia în format Markdown.
 
-## Optimizarea consumului de tokenuri AI
 
+## Optimizarea consumului de tokenuri AI
 Telefoanele moderne fac fotografii foarte detaliate, la rezoluții de 4K sau mai mari. Dar o fotografie cu o rezolutie mai mare nu înseamnă mai multă informație utilă pentru AI.
 
 Modelele AI procesează imaginile împărțindu-le în secțiuni mici, numite **tiles/patches**. Consumul de tokenuri depinde de rezoluție și de setările de procesare, nu doar de numărul de cuvinte de pe pagină. O fotografie de rezoluție înaltă care conține doar două propoziții consuma mai multe tokenuri decât trimiterea acelorași propoziții ca text simplu.
@@ -32,11 +31,12 @@ Trimiterea directă a fotografiilor presupune procesarea imaginilor paginilor, i
 
 StudyFlowMD este conceput să extragă textul folosind **OCR (Optical Character Recognition)** și să îl salveze în format Markdown: text simplu, cu formatare pentru titluri și liste. Poți apoi reutiliza notițele pentru rezumate, explicații și întrebări de recapitulare, fără să trimiți fotografiile de fiecare dată.
 
-## Ce probleme rezolvă?
 
+## Ce probleme rezolvă?
 1. **Mai mult spațiu în fereastra de context:** Modelele AI au o limită de informație pe care o pot procesa, numită "fereastră de context", sau mai comun in engleză: **context window**. Fotografiile ocupa mai mult din acest spațiu decât textul extras din ele. Conversia în text utilizează mai eficient fereastra de context.
 
 2. **Consum redus de tokenuri:** Trimiterea textului extras consuma mai puține tokenuri decât procesarea fotografiilor originale. Acest lucru reduce costurile atunci când se folosește un API plătit.
+
 
 ## Exemplu ilustrativ: fotografie a unui caiet, împărțirea fotografiei în **tiles/patches**:
 - 🟧 **Zone cu conținut irelevant:** fundalul și obiectele din jurul caietului.
@@ -47,7 +47,6 @@ Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin
 <img width="825" height="1098" alt="2222" src="https://github.com/user-attachments/assets/5fd8d21e-9573-410b-b2d0-c03b6848519b" />
 
 ## Avantaj pentru modelele AI locale
-
 Multe modele populare care rulează local, precum Qwen3, Llama 3.1 și DeepSeek-R1, acceptă doar text, fără posibilitatea de a interpreta direct imagini.
 
 Prin extragerea notițelor cu OCR și salvarea lor în text, StudyFlowMD permite folosirea acestora și cu modele fără suport pentru imagini. Studentul poate importa textul într-un model local pentru explicații, rezumate și întrebări de recapitulare.
