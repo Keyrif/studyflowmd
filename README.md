@@ -1,5 +1,5 @@
 ## StudyFlowMD
-O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau scrise in format digital , în Markdown pentru o utilizare eficientă a tokenurilor AI.
+O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau scrise in format digital , în text markdown pentru o utilizare eficientă a tokenurilor AI.
 
 ## Tehnologii Utilizate
 
