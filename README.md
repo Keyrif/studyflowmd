@@ -1,4 +1,4 @@
-## StudyFlowMD
+z## StudyFlowMD
 O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau scrise in format digital , în text markdown pentru o utilizare eficientă a tokenurilor AI.
 
 ## Tehnologii Utilizate
@@ -46,3 +46,8 @@ Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin
 
 <img width="825" height="1098" alt="2222" src="https://github.com/user-attachments/assets/5fd8d21e-9573-410b-b2d0-c03b6848519b" />
 
+## Avantaj pentru modelele AI locale
+
+Multe modele populare care rulează local, precum Qwen3, Llama 3.1 și DeepSeek-R1, acceptă doar text, fără posibilitatea de a interpreta direct imagini.
+
+Prin extragerea notițelor cu OCR și salvarea lor în text, StudyFlowMD permite folosirea acestora și cu modele fără suport pentru imagini. Studentul poate importa textul într-un model local pentru explicații, rezumate și întrebări de recapitulare.
