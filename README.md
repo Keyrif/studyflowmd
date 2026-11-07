@@ -30,7 +30,7 @@ Imaginează-ți că te întorci din vacanță și împrumuți caietul unui coleg
 
 Trimiterea directă a fotografiilor presupune procesarea imaginilor paginilor, inclusiv a spațiilor goale, a marginilor și a liniilor caietului.
 
-StudyFlowMD este conceput să extragă textul folosind **OCR (recunoașterea textului din imagini)** și să îl salveze în format Markdown: text simplu, cu formatare pentru titluri și liste. Poți apoi reutiliza notițele pentru rezumate, explicații și întrebări de recapitulare, fără să trimiți fotografiile de fiecare dată.
+StudyFlowMD este conceput să extragă textul folosind **OCR (Optical Character Recognition)** și să îl salveze în format Markdown: text simplu, cu formatare pentru titluri și liste. Poți apoi reutiliza notițele pentru rezumate, explicații și întrebări de recapitulare, fără să trimiți fotografiile de fiecare dată.
 
 ## Ce probleme rezolvă?
 
