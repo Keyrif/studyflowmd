@@ -40,7 +40,7 @@ StudyFlowMD este conceput să extragă textul folosind **OCR (Optical Character 
 
 ## Exemplu ilustrativ: fotografie a unui caiet, împărțirea fotografiei în **tiles/patches**:
 - 🟧 **Zone cu conținut irelevant:** fundalul și obiectele din jurul caietului.
-- 🟦 **Zone cu puțin text și mult spațiu gol:** ocupă o parte din imagine, deși conțin puțină informație utilă.
+- 🟦 **Zone cu puțin text și mult spațiu gol:** ocupă o parte din imagine, deși conțin puțină informație
 
 Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin OCR permite trimiterea notițelor fără fundalul și spațiile goale din fotografie.
 
