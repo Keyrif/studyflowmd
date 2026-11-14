@@ -73,7 +73,6 @@ function burstParticles(x,y){
   }
 }
 
-// Login / register reale: vorbesc cu /api/auth/ din Django.
 let authMode='login';
 function renderAuth(mode){
   authMode=mode;const registering=mode==='register';
@@ -106,14 +105,14 @@ $('#auth-form').onsubmit=async event=>{
     const data=registering
       ?await api('/api/auth/register/',{method:'POST',body:{username:$('#auth-name').value.trim(),email:identifier,password}})
       :await api('/api/auth/login/',{method:'POST',body:{login:identifier,password}});
-    currentUser=data.user;
-    updateUsername(currentUser.username);$('#auth-form').reset();location.hash='dashboard';navigate();
+    await startSession(data.user);
+    $('#auth-form').reset();render();location.hash='dashboard';navigate();
   }catch(error){$('#auth-error').textContent=error.message;}
   finally{submit.disabled=false;}
 };
 async function logout(){
   try{await api('/api/auth/logout/',{method:'POST'});}catch{}
-  currentUser=null;
+  await startSession(null);render();
   clearTimerEffects();$('#focus-reset').onclick();setMobileMenu(false);updateUsername('Student');
   location.hash='login';navigate();
 }

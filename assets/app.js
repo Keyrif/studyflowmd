@@ -31,13 +31,11 @@ const icons = {
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-// Userul logat, primit de la Django (null = nelogat).
 let currentUser = null;
 function getCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : '';
 }
-// Helper pentru toate apelurile catre backend: trimite JSON + tokenul CSRF.
 async function api(path, { method = 'GET', body } = {}) {
   const response = await fetch(path, {
     method,
@@ -46,8 +44,14 @@ async function api(path, { method = 'GET', body } = {}) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error || data?.detail || 'Something went wrong. Try again.');
+  if (!response.ok) throw new Error(apiErrorMessage(data));
   return data;
+}
+function apiErrorMessage(data) {
+  if (typeof data?.error === 'string') return data.error;
+  if (typeof data?.detail === 'string') return data.detail;
+  const first = data && typeof data === 'object' ? Object.values(data)[0] : null;
+  return Array.isArray(first) ? String(first[0]) : 'Something went wrong. Try again.';
 }
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.file}</svg>`;
@@ -61,7 +65,6 @@ const escapeHTML = (value) =>
     /[&<>"']/g,
     (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch],
   );
-const defaultSubjects = [];
 const dateString = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 function offsetDate(days) {
@@ -69,37 +72,126 @@ function offsetDate(days) {
   date.setDate(date.getDate() + days);
   return dateString(date);
 }
-const seed = { tasks: [], notes: [] };
-let state;
-let storageAvailable = true;
+let state = { tasks: [], subjects: [], notes: [] };
 try {
-  const saved = JSON.parse(localStorage.getItem('studyflow.workspace.v1'));
-  const validTask = (t) =>
-    t &&
-    ['id', 'title', 'subject', 'date', 'kind'].every((k) => typeof t[k] === 'string') &&
-    typeof t.done === 'boolean' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(t.date);
-  const validNote = (n) =>
-    n && ['id', 'title', 'subject', 'body', 'updated'].every((k) => typeof n[k] === 'string');
-  state =
-    saved &&
-    Array.isArray(saved.tasks) &&
-    saved.tasks.every(validTask) &&
-    Array.isArray(saved.notes) &&
-    saved.notes.every(validNote)
-      ? saved
-      : structuredClone(seed);
-} catch {
-  state = structuredClone(seed);
+  localStorage.removeItem('studyflow.workspace.v1');
+  localStorage.removeItem('studyflow.demoSession');
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith('studyflow.notes.'))
+    .forEach((key) => localStorage.removeItem(key));
+} catch {}
+let storageAvailable = true;
+const KIND_TO_API = { Assignment: 'assignment', Exam: 'exam', 'Study session': 'study' };
+const KIND_FROM_API = { assignment: 'Assignment', exam: 'Exam', study: 'Study session' };
+function subjectFromApi(s) {
+  return {
+    id: String(s.id),
+    name: s.name,
+    color: s.color,
+    public: s.public,
+    role: s.role,
+    ownerName: s.owner_name,
+    inviteCode: s.invite_code || '',
+    members: (s.members || []).map((m) => ({ id: String(m.id), name: m.username })),
+  };
+}
+function taskFromApi(t) {
+  return {
+    id: String(t.id),
+    title: t.title,
+    subject: state.subjects.find((s) => s.id === String(t.subject))?.name || '',
+    date: t.date,
+    kind: KIND_FROM_API[t.kind] || 'Assignment',
+    color: t.color,
+    done: t.done,
+  };
+}
+function taskToApi(t) {
+  const subject = state.subjects.find((s) => s.name === t.subject);
+  return {
+    title: t.title,
+    subject: subject ? Number(subject.id) : null,
+    date: t.date,
+    kind: KIND_TO_API[t.kind] || 'assignment',
+    color: t.color,
+    done: t.done,
+  };
+}
+function noteFromApi(n) {
+  return {
+    id: String(n.id),
+    title: n.title,
+    subject: state.subjects.find((s) => s.id === String(n.subject))?.name || '',
+    body: n.body,
+    format: n.format,
+    updated: n.updated,
+    opened: localPrefs.opened[String(n.id)],
+  };
+}
+function noteToApi(n) {
+  const subject = state.subjects.find((s) => s.name === n.subject && s.role === 'owner');
+  return {
+    title: n.title,
+    subject: subject ? Number(subject.id) : null,
+    body: n.body,
+    format: n.format,
+  };
+}
+let localPrefs = { opened: {}, subjectOrder: [] };
+const prefsKey = () => `studyflow.prefs.${currentUser?.id}`;
+function loadPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(prefsKey()));
+    localPrefs = {
+      opened: saved?.opened && typeof saved.opened === 'object' ? saved.opened : {},
+      subjectOrder: Array.isArray(saved?.subjectOrder) ? saved.subjectOrder : [],
+    };
+  } catch {
+    localPrefs = { opened: {}, subjectOrder: [] };
+  }
+}
+function applySubjectOrder() {
+  const position = (s) => {
+    const index = localPrefs.subjectOrder.indexOf(s.id);
+    return index === -1 ? Infinity : index;
+  };
+  state.subjects.sort((a, b) => position(a) - position(b));
+}
+async function loadWorkspace() {
+  loadPrefs();
+  const [subjects, tasks, notes] = await Promise.all([
+    api('/api/subjects/'),
+    api('/api/tasks/'),
+    api('/api/notes/'),
+  ]);
+  state.subjects = subjects.map(subjectFromApi);
+  applySubjectOrder();
+  state.tasks = tasks.map(taskFromApi);
+  state.notes = notes.map(noteFromApi);
+}
+async function startSession(user) {
+  currentUser = user;
+  state = { tasks: [], subjects: [], notes: [] };
+  if (!user) return;
+  updateUsername(user.username);
+  try {
+    await loadWorkspace();
+  } catch (error) {
+    toast('Could not load your workspace. ' + error.message);
+  }
 }
 function save() {
+  if (!currentUser) return false;
+  localPrefs.subjectOrder = state.subjects.map((s) => s.id);
+  state.notes.forEach((n) => {
+    if (n.opened) localPrefs.opened[n.id] = n.opened;
+  });
   try {
-    localStorage.setItem('studyflow.workspace.v1', JSON.stringify(state));
+    localStorage.setItem(prefsKey(), JSON.stringify(localPrefs));
     storageAvailable = true;
     return true;
   } catch {
     storageAvailable = false;
-    toast('Browser storage is unavailable. Changes last only until this page closes.');
     return false;
   }
 }
@@ -111,18 +203,7 @@ function toast(message) {
   toastTimeout = setTimeout(() => ($('#toast').hidden = true), 4500);
 }
 const subjectColor = (name) => state.subjects.find((s) => s.name === name)?.color || '#89a392';
-if (!Array.isArray(state.subjects))
-  state.subjects = defaultSubjects.map((s, i) => ({ ...s, id: 's' + i, public: false }));
-state.subjects.forEach((s) => {
-  s.role = s.role || 'owner';
-  s.ownerName = s.ownerName || localUsername();
-  s.members = s.members || [];
-  s.inviteCode = s.inviteCode || crypto.randomUUID().slice(0, 8).toUpperCase();
-});
 let subjectTab = 'personal';
-state.notes.forEach((n) => {
-  if (!['md', 'txt'].includes(n.format)) n.format = 'md';
-});
 let activeSubject = null;
 let currentView = 'dashboard';
 let calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -298,9 +379,13 @@ document.addEventListener('click', (event) => {
   if (target.hasAttribute('data-add-task')) openTask();
   if (target.dataset.editTask) openTask(target.dataset.editTask);
   if (target.dataset.deleteTask) {
-    state.tasks = state.tasks.filter((t) => t.id !== target.dataset.deleteTask);
-    save();
-    render();
+    const id = target.dataset.deleteTask;
+    api(`/api/tasks/${id}/`, { method: 'DELETE' })
+      .then(() => {
+        state.tasks = state.tasks.filter((t) => t.id !== id);
+        render();
+      })
+      .catch((error) => toast(error.message));
   }
   if (target.dataset.editNote) openNote(target.dataset.editNote);
   if (target.hasAttribute('data-close')) closeDialog(target.closest('dialog'));
@@ -312,13 +397,20 @@ document.addEventListener('change', (event) => {
   if (event.target.dataset.complete) {
     const task = state.tasks.find((t) => t.id === event.target.dataset.complete);
     if (task) {
-      task.done = event.target.checked;
-      save();
-      render();
+      const done = event.target.checked;
+      api(`/api/tasks/${task.id}/`, { method: 'PATCH', body: { done } })
+        .then(() => {
+          task.done = done;
+          render();
+        })
+        .catch((error) => {
+          event.target.checked = !done;
+          toast(error.message);
+        });
     }
   }
 });
-$('#task-form').addEventListener('submit', (event) => {
+$('#task-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const title = $('#task-title').value.trim();
   if (!title) {
@@ -327,7 +419,6 @@ $('#task-form').addEventListener('submit', (event) => {
   }
   const existing = state.tasks.find((t) => t.id === $('#task-id').value);
   const task = {
-    id: existing?.id || crypto.randomUUID(),
     title,
     subject: $('#task-subject').value,
     date: $('#task-date').value,
@@ -335,14 +426,22 @@ $('#task-form').addEventListener('submit', (event) => {
     color: selectedEventColor,
     done: existing?.done || false,
   };
-  if (existing) Object.assign(existing, task);
-  else state.tasks.push(task);
-  save();
+  try {
+    const saved = existing
+      ? await api(`/api/tasks/${existing.id}/`, { method: 'PATCH', body: taskToApi(task) })
+      : await api('/api/tasks/', { method: 'POST', body: taskToApi(task) });
+    const fresh = taskFromApi(saved);
+    if (existing) Object.assign(existing, fresh);
+    else state.tasks.push(fresh);
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
   render();
   closeDialog($('#task-dialog'));
-  if (storageAvailable) toast('Task saved. One step closer.');
+  toast('Task saved. One step closer.');
 });
-$('#note-form').addEventListener('submit', (event) => {
+$('#note-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const title = $('#note-title').value.trim();
   if (!title) {
@@ -352,24 +451,37 @@ $('#note-form').addEventListener('submit', (event) => {
   const existing = state.notes.find((n) => n.id === $('#note-id').value);
   if (isSharedSubject(existing?.subject) || isSharedSubject($('#note-subject').value)) return;
   const note = {
-    id: existing?.id || crypto.randomUUID(),
     title,
     subject: $('#note-subject').value,
     body: $('#note-body').value,
     format: $('#note-format').value,
-    updated: new Date().toISOString(),
   };
-  if (existing) Object.assign(existing, note);
-  else state.notes.push(note);
-  save();
+  try {
+    const fresh = noteFromApi(
+      existing
+        ? await api(`/api/notes/${existing.id}/`, { method: 'PATCH', body: noteToApi(note) })
+        : await api('/api/notes/', { method: 'POST', body: noteToApi(note) }),
+    );
+    if (existing) Object.assign(existing, fresh, { opened: existing.opened });
+    else state.notes.push(fresh);
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
   render();
   closeDialog($('#note-dialog'));
-  if (storageAvailable) toast('Your note is saved.');
+  toast('Your note is saved.');
 });
-$('#delete-note').onclick = () => {
-  if (isSharedSubject(state.notes.find((n) => n.id === $('#note-id').value)?.subject)) return;
-  state.notes = state.notes.filter((n) => n.id !== $('#note-id').value);
-  save();
+$('#delete-note').onclick = async () => {
+  const id = $('#note-id').value;
+  if (isSharedSubject(state.notes.find((n) => n.id === id)?.subject)) return;
+  try {
+    await api(`/api/notes/${id}/`, { method: 'DELETE' });
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
+  state.notes = state.notes.filter((n) => n.id !== id);
   render();
   closeDialog($('#note-dialog'));
 };
@@ -544,7 +656,7 @@ function openSubject(id) {
   $('#subject-dialog').showModal();
   $('#subject-name').focus();
 }
-$('#subject-form').onsubmit = (event) => {
+$('#subject-form').onsubmit = async (event) => {
   event.preventDefault();
   const name = $('#subject-name').value.trim();
   const id = $('#subject-id').value;
@@ -558,29 +670,29 @@ $('#subject-form').onsubmit = (event) => {
   }
   const existing = state.subjects.find((s) => s.id === id);
   if (existing?.role === 'member') return;
-  if (existing) {
-    const oldName = existing.name;
-    existing.name = name;
-    existing.public = $('#subject-public').value === 'public';
-    [...state.tasks, ...state.notes].forEach((item) => {
-      if (item.subject === oldName) item.subject = name;
-    });
-  } else
-    state.subjects.push({
-      id: crypto.randomUUID(),
-      name,
-      color: '#89a392',
-      role: 'owner',
-      ownerName: localUsername(),
-      members: [],
-      inviteCode: crypto.randomUUID().slice(0, 8).toUpperCase(),
-      public: $('#subject-public').value === 'public',
-    });
+  const body = { name, public: $('#subject-public').value === 'public' };
+  try {
+    const saved = subjectFromApi(
+      existing
+        ? await api(`/api/subjects/${existing.id}/`, { method: 'PATCH', body })
+        : await api('/api/subjects/', { method: 'POST', body }),
+    );
+    if (existing) {
+      const oldName = existing.name;
+      Object.assign(existing, saved);
+      [...state.tasks, ...state.notes].forEach((item) => {
+        if (item.subject === oldName) item.subject = saved.name;
+      });
+    } else state.subjects.push(saved);
+  } catch (error) {
+    $('#subject-error').textContent = error.message;
+    return;
+  }
   save();
   render();
   navigate();
   closeDialog($('#subject-dialog'));
-  if (storageAvailable) toast(existing ? 'Subject updated.' : 'Subject created.');
+  toast(existing ? 'Subject updated.' : 'Subject created.');
 };
 $('#delete-subject').onclick = () => {
   const subject = state.subjects.find((s) => s.id === $('#subject-id').value);
@@ -588,11 +700,18 @@ $('#delete-subject').onclick = () => {
   $('#delete-subject-description').textContent = `Remove “${subject.name}” from your subjects?`;
   $('#delete-subject-dialog').showModal();
 };
-$('#confirm-delete-subject').onclick = () => {
+$('#confirm-delete-subject').onclick = async () => {
   const subject = state.subjects.find((s) => s.id === $('#subject-id').value);
   if (!subject || subject.role === 'member') return;
-  [...state.tasks, ...state.notes].forEach((item) => {
-    if (item.subject === subject.name) item.subject = '';
+  try {
+    await api(`/api/subjects/${subject.id}/`, { method: 'DELETE' });
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
+  state.tasks = state.tasks.filter((t) => t.subject !== subject.name);
+  state.notes.forEach((n) => {
+    if (n.subject === subject.name) n.subject = '';
   });
   state.subjects = state.subjects.filter((s) => s.id !== subject.id);
   activeSubject = null;
@@ -711,23 +830,23 @@ $('#import-form').onsubmit = async (event) => {
   }
   $('#import-submit').disabled = true;
   try {
-    const notes = await Promise.all(
+    const drafts = await Promise.all(
       files.map(async (file) => ({
-        id: crypto.randomUUID(),
         title: file.name.replace(/\.(md|txt)$/i, ''),
         format: file.name.toLowerCase().endsWith('.txt') ? 'txt' : 'md',
         body: await file.text(),
         subject,
-        updated: new Date().toISOString(),
       })),
     );
-    state.notes.push(...notes);
-    save();
+    const notes = await Promise.all(
+      drafts.map((draft) => api('/api/notes/', { method: 'POST', body: noteToApi(draft) })),
+    );
+    state.notes.push(...notes.map(noteFromApi));
     render();
     closeDialog($('#import-dialog'));
-    if (storageAvailable) toast(`${notes.length} file${notes.length === 1 ? '' : 's'} imported.`);
-  } catch {
-    $('#import-error').textContent = 'A file could not be read. Try again.';
+    toast(`${notes.length} file${notes.length === 1 ? '' : 's'} imported.`);
+  } catch (error) {
+    $('#import-error').textContent = error.message || 'A file could not be read. Try again.';
   } finally {
     $('#import-submit').disabled = false;
   }
@@ -932,42 +1051,19 @@ $('#join-subject').onclick = () => {
   $('#join-dialog').showModal();
   $('#join-code').focus();
 };
-$('#join-form').onsubmit = (event) => {
+$('#join-form').onsubmit = async (event) => {
   event.preventDefault();
   const code = $('#join-code').value.trim().toUpperCase();
-  if (state.subjects.some((s) => s.inviteCode === code)) {
-    $('#join-error').textContent = 'This subject is already in your workspace.';
+  try {
+    const subject = subjectFromApi(
+      await api('/api/subjects/join/', { method: 'POST', body: { code } }),
+    );
+    state.subjects.push(subject);
+  } catch (error) {
+    $('#join-error').textContent = error.message;
     return;
   }
-  if (code !== 'STUDY-DEMO') {
-    $('#join-error').textContent = 'Code not found in this local preview. Try STUDY-DEMO.';
-    return;
-  }
-  if (state.subjects.some((s) => s.name === 'Shared study group')) {
-    $('#join-error').textContent = 'A subject with this name already exists.';
-    return;
-  }
-  const subject = {
-    id: crypto.randomUUID(),
-    name: 'Shared study group',
-    role: 'member',
-    ownerName: 'Alex Morgan',
-    color: '#b59ae7',
-    public: true,
-    inviteCode: code,
-    members: [],
-  };
-  state.subjects.push(subject);
-  state.notes.push({
-    id: crypto.randomUUID(),
-    title: 'Welcome to the study group',
-    subject: subject.name,
-    body: '# Welcome\n\nThis is Alex’s shared collection.\n\nMembers can read and download these notes. Your membership stays saved in this browser until you leave.\n\nReal owner updates and revocation will be connected through Django.',
-    format: 'md',
-    updated: new Date().toISOString(),
-  });
   subjectTab = 'shared';
-  save();
   render();
   closeDialog($('#join-dialog'));
   location.hash = 'subjects';
@@ -992,7 +1088,13 @@ $('#leave-subject').onclick = () => {
   confirmAccess(
     'Leave this subject?',
     `“${subject.name}” will leave your Shared tab. ${subject.ownerName} keeps the original files. You’ll need a valid invitation to rejoin.`,
-    () => {
+    async () => {
+      try {
+        await api(`/api/subjects/${subject.id}/leave/`, { method: 'POST' });
+      } catch (error) {
+        toast(error.message);
+        return;
+      }
       state.subjects = state.subjects.filter((s) => s.id !== subject.id);
       state.notes = state.notes.filter((n) => n.subject !== subject.name);
       state.tasks.forEach((t) => {
@@ -1016,9 +1118,21 @@ function confirmRevokeMember(memberId) {
   confirmAccess(
     'Remove access?',
     `${member.name} will lose membership in “${subject.name}”. Other members keep their access.`,
-    () => {
-      subject.members = subject.members.filter((m) => m.id !== memberId);
-      save();
+    async () => {
+      try {
+        Object.assign(
+          subject,
+          subjectFromApi(
+            await api(`/api/subjects/${subject.id}/remove-member/`, {
+              method: 'POST',
+              body: { user_id: Number(memberId) },
+            }),
+          ),
+        );
+      } catch (error) {
+        toast(error.message);
+        return;
+      }
       renderSubjects();
       renderAccess(subject);
     },
@@ -1030,39 +1144,29 @@ $('#rotate-code').onclick = () => {
   confirmAccess(
     'Reset invitation code?',
     'The old code will stop accepting new members. Existing members keep access.',
-    () => {
-      subject.inviteCode = crypto.randomUUID().slice(0, 8).toUpperCase();
-      save();
+    async () => {
+      try {
+        Object.assign(
+          subject,
+          subjectFromApi(await api(`/api/subjects/${subject.id}/rotate-code/`, { method: 'POST' })),
+        );
+      } catch (error) {
+        toast(error.message);
+        return;
+      }
       renderAccess(subject);
     },
   );
 };
-$('#demo-member').onclick = () => {
-  const subject = state.subjects.find((s) => s.id === $('#subject-id').value);
-  if (subject?.role !== 'owner') return;
-  if (subject.members.some((m) => m.demo)) {
-    toast('The demo member is already in this subject.');
-    return;
-  }
-  subject.members.push({ id: crypto.randomUUID(), name: 'Taylor (demo)', demo: true });
-  save();
-  renderSubjects();
-  renderAccess(subject);
-};
 initializePreferences();
 hydrateIcons();
 render();
-// La pornire intrebam backend-ul cine e logat, apoi afisam pagina potrivita.
 document.documentElement.style.visibility = 'hidden';
 api('/api/auth/me/')
-  .then((data) => {
-    currentUser = data.user;
-  })
-  .catch(() => {
-    currentUser = null;
-  })
+  .then((data) => startSession(data.user))
+  .catch(() => startSession(null))
   .finally(() => {
-    if (currentUser) updateUsername(currentUser.username);
+    render();
     navigate();
     document.documentElement.style.visibility = '';
   });

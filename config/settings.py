@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Citeste variabilele din fisierul .env (parola etc.)
 load_dotenv(BASE_DIR / '.env')
 
 
@@ -63,7 +62,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR],  # aici sta index.html
+        'DIRS': [BASE_DIR],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -128,7 +127,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'assets/'
-STATICFILES_DIRS = [BASE_DIR / 'assets']  # CSS/JS-ul frontend-ului
+STATICFILES_DIRS = [BASE_DIR / 'assets']
 
 
 # Email

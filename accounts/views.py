@@ -11,13 +11,11 @@ User = get_user_model()
 
 
 def user_data(user):
-    """Ce trimitem frontend-ului despre user (niciodata parola)."""
     return {'id': user.id, 'username': user.username, 'email': user.email}
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class MeView(APIView):
-    """GET /api/auth/me/ -> cine e logat acum (sau null)."""
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -28,7 +26,6 @@ class MeView(APIView):
 
 @method_decorator(csrf_protect, name='dispatch')
 class RegisterView(APIView):
-    """POST /api/auth/register/ -> creeaza un rand nou in auth_user si logheaza userul."""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -48,24 +45,23 @@ class RegisterView(APIView):
 
         user = User(username=username, email=email)
         try:
-            validate_password(password, user)  # regulile din AUTH_PASSWORD_VALIDATORS
+            validate_password(password, user)
         except ValidationError as error:
             return Response({'error': ' '.join(error.messages)},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        user.set_password(password)  # salveaza HASH-ul, nu parola
+        user.set_password(password)
         user.save()
-        login(request, user)         # porneste sesiunea (cookie)
+        login(request, user)       
         return Response({'user': user_data(user)}, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(csrf_protect, name='dispatch')
 class LoginView(APIView):
-    """POST /api/auth/login/ -> verifica parola si porneste sesiunea."""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        identifier = str(request.data.get('login', '')).strip()  # email SAU username
+        identifier = str(request.data.get('login', '')).strip()
         password = str(request.data.get('password', ''))
 
         lookup = {'email__iexact': identifier} if '@' in identifier else {'username__iexact': identifier}
@@ -80,7 +76,6 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
-    """POST /api/auth/logout/ -> inchide sesiunea."""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):

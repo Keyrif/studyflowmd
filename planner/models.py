@@ -26,11 +26,25 @@ class Task(models.Model):
 
     user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  
     title   = models.CharField(max_length=200)       
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)             
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True)             
     date    = models.DateField(db_index=True)                                  
     kind    = models.CharField(max_length=20, choices=KIND_CHOICES)  
     color   = models.CharField(max_length=7)                      
     done    = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.title
+
+
+class Note(models.Model):
+    FORMAT_CHOICES = [('md', 'Markdown'), ('txt', 'Text')]
+
+    user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    title   = models.CharField(max_length=200)
+    subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True)
+    body    = models.TextField(blank=True)
+    format  = models.CharField(max_length=3, choices=FORMAT_CHOICES, default='md')
+    updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title
