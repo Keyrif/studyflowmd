@@ -18,6 +18,9 @@ class Subject(models.Model):
         blank=True,
     )
 
+    def __str__(self):
+        return self.name
+
 class Task(models.Model):
     KIND_CHOICES = [('assignment','Assignment'), ('exam','Exam'), ('study','Study session')]
 
@@ -28,3 +31,6 @@ class Task(models.Model):
     kind    = models.CharField(max_length=20, choices=KIND_CHOICES)  
     color   = models.CharField(max_length=7)                      
     done    = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.title
