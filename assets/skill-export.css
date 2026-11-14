@@ -1,0 +1,9 @@
+#skill-dialog{width:min(680px,calc(100vw - 28px));max-height:88dvh;overflow:auto}
+.subject-skill-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.skill-options{margin:22px 0 12px}.skill-options legend{font-size:1rem;font-weight:500}
+#skill-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.skill-option{display:flex;align-items:flex-start;gap:10px;padding:13px;border:1px solid var(--line);border-radius:10px;cursor:pointer;font-size:calc(12px * var(--font-scale,1))}
+.skill-option:has(input:checked){background:var(--line)}.skill-option input{margin-top:3px;accent-color:var(--accent,#416c58);flex-shrink:0}
+.skill-preview{border:1px solid var(--line);border-radius:10px;margin:18px 0;padding:12px}.skill-preview summary{cursor:pointer}.skill-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;margin:14px 0 0;color:var(--text);font-size:12px}
+[data-theme="cs"] .skill-option,[data-theme="cs"] .skill-preview{border-radius:0}
+@media(max-width:520px){#skill-options{grid-template-columns:1fr}#skill-dialog .dialog-actions{flex-wrap:wrap}.subject-skill-actions .button{flex:1;justify-content:center}}
