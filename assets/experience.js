@@ -73,7 +73,7 @@ function burstParticles(x,y){
   }
 }
 
-// Deliberately a UI demo: credentials are validated for form UX, never persisted or sent.
+// Login / register reale: vorbesc cu /api/auth/ din Django.
 let authMode='login';
 function renderAuth(mode){
   authMode=mode;const registering=mode==='register';
@@ -83,7 +83,10 @@ function renderAuth(mode){
   $('#register-name-field').hidden=!registering;$('#auth-name').required=registering;
   $('#confirm-password-field').hidden=!registering;$('#auth-confirm').required=registering;
   $('#auth-password').autocomplete=registering?'new-password':'current-password';
-  $('#auth-submit').innerHTML=(registering?'Create demo profile':'Sign in to demo')+' '+icon('arrow');
+  $('#auth-submit').innerHTML=(registering?'Create account':'Sign in')+' '+icon('arrow');
+  $('label[for="auth-email"]').textContent=registering?'Email':'Email or username';
+  $('#auth-email').type=registering?'email':'text';
+  $('#auth-email').placeholder=registering?'you@university.edu':'you@university.edu or username';
   ['login','register'].forEach(tab=>{const link=$('#'+tab+'-tab');link.classList.toggle('active',tab===mode);if(tab===mode)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
   $('#auth-theme').textContent=document.documentElement.dataset.theme==='cs'?'Switch to acrylic':'Switch light / dark';
 }
@@ -91,18 +94,26 @@ function updateUsername(username){
   $('#account-name').textContent=username;
   $('.workspace-icon').textContent=username.slice(0,1).toUpperCase();
 }
-$('#auth-form').onsubmit=event=>{
+$('#auth-form').onsubmit=async event=>{
   event.preventDefault();
-  const name=authMode==='register'?$('#auth-name').value.trim():$('#auth-email').value.split('@')[0];
-  if(!name){$('#auth-error').textContent='Please enter a username.';return;}
-  if(authMode==='register'&&$('#auth-password').value!==$('#auth-confirm').value){$('#auth-error').textContent='The passwords don’t match yet.';$('#auth-confirm').focus();return;}
-  demoSession={username:name};
-  try{localStorage.setItem('studyflow.demoSession',JSON.stringify(demoSession));}catch{toast('Browser storage is unavailable. Login is remembered only in this tab.');}
-  updateUsername(name);$('#auth-form').reset();location.hash='dashboard';navigate();
+  const registering=authMode==='register';
+  const identifier=$('#auth-email').value.trim();
+  const password=$('#auth-password').value;
+  if(registering&&!$('#auth-name').value.trim()){$('#auth-error').textContent='Please enter a username.';return;}
+  if(registering&&password!==$('#auth-confirm').value){$('#auth-error').textContent='The passwords don’t match yet.';$('#auth-confirm').focus();return;}
+  const submit=$('#auth-submit');submit.disabled=true;$('#auth-error').textContent='';
+  try{
+    const data=registering
+      ?await api('/api/auth/register/',{method:'POST',body:{username:$('#auth-name').value.trim(),email:identifier,password}})
+      :await api('/api/auth/login/',{method:'POST',body:{login:identifier,password}});
+    currentUser=data.user;
+    updateUsername(currentUser.username);$('#auth-form').reset();location.hash='dashboard';navigate();
+  }catch(error){$('#auth-error').textContent=error.message;}
+  finally{submit.disabled=false;}
 };
-function logout(){
-  demoSession=null;
-  try{localStorage.removeItem('studyflow.demoSession');}catch{}
+async function logout(){
+  try{await api('/api/auth/logout/',{method:'POST'});}catch{}
+  currentUser=null;
   clearTimerEffects();$('#focus-reset').onclick();setMobileMenu(false);updateUsername('Student');
   location.hash='login';navigate();
 }
@@ -112,15 +123,4 @@ mobileLogout.id='mobile-logout';mobileLogout.className='theme-switch';mobileLogo
 mobileLogout.innerHTML=icon('logout')+'<span>Log out</span>';
 $('#appearance-panel').append(mobileLogout);
 $('#auth-theme').onclick=()=>{rememberTheme(document.documentElement.dataset.theme==='dark'?'glass':'dark');$('#auth-theme').textContent='Switch light / dark';};
-if(demoSession)updateUsername(demoSession.username);
-window.addEventListener('storage',event=>{
-  if(event.key!=='studyflow.demoSession'&&event.key!==null)return;
-  demoSession=readDemoSession();
-  if(!demoSession){
-    clearTimerEffects();$('#focus-reset').onclick();
-    $$('dialog[open]').forEach(dialog=>dialog.close());
-    setMobileMenu(false);updateUsername('Student');
-  }else updateUsername(demoSession.username);
-  navigate();
-});
 if(['login','register'].includes(location.hash.slice(1)))renderAuth(location.hash.slice(1));

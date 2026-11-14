@@ -31,17 +31,24 @@ const icons = {
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-function readDemoSession() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('studyflow.demoSession'));
-    return typeof saved?.username === 'string' && saved.username.trim()
-      ? { username: saved.username.trim() }
-      : null;
-  } catch {
-    return null;
-  }
+// Userul logat, primit de la Django (null = nelogat).
+let currentUser = null;
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : '';
 }
-let demoSession = readDemoSession();
+// Helper pentru toate apelurile catre backend: trimite JSON + tokenul CSRF.
+async function api(path, { method = 'GET', body } = {}) {
+  const response = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || data?.detail || 'Something went wrong. Try again.');
+  return data;
+}
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.file}</svg>`;
 function hydrateIcons() {
@@ -54,12 +61,7 @@ const escapeHTML = (value) =>
     /[&<>"']/g,
     (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch],
   );
-const defaultSubjects = [
-  { name: 'Microeconomics', color: '#9d9fbd', detail: 'Choices, markets & everything between.' },
-  { name: 'Databases', color: '#7eaa97', detail: 'A little structure for a lot of data.' },
-  { name: 'Statistics', color: '#c5a16d', detail: 'Finding the story in the numbers.' },
-  { name: 'Web development', color: '#839eb6', detail: 'One idea, brought to the browser.' },
-];
+const defaultSubjects = [];
 const dateString = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 function offsetDate(days) {
@@ -67,73 +69,7 @@ function offsetDate(days) {
   date.setDate(date.getDate() + days);
   return dateString(date);
 }
-const seed = {
-  tasks: [
-    {
-      id: 't1',
-      title: 'Problem set · Consumer theory',
-      subject: 'Microeconomics',
-      date: offsetDate(1),
-      kind: 'Assignment',
-      done: false,
-    },
-    {
-      id: 't2',
-      title: 'Review SQL joins & normalization',
-      subject: 'Databases',
-      date: offsetDate(2),
-      kind: 'Study session',
-      done: false,
-    },
-    {
-      id: 't3',
-      title: 'Midterm · Probability distributions',
-      subject: 'Statistics',
-      date: offsetDate(4),
-      kind: 'Exam',
-      done: false,
-    },
-    {
-      id: 't4',
-      title: 'Build the first project wireframe',
-      subject: 'Web development',
-      date: offsetDate(6),
-      kind: 'Assignment',
-      done: false,
-    },
-    {
-      id: 't5',
-      title: 'Organize this semester’s subjects',
-      subject: 'Web development',
-      date: offsetDate(0),
-      kind: 'Study session',
-      done: true,
-    },
-  ],
-  notes: [
-    {
-      id: 'n1',
-      title: 'Consumer theory',
-      subject: 'Microeconomics',
-      body: '# Consumer theory\n\nHow we make choices with limited resources.\n\n## Key concepts\n- Preferences and utility\n- Budget constraints\n- Marginal rate of substitution\n\n## Next session\nWork through the practice problems.',
-      updated: new Date().toISOString(),
-    },
-    {
-      id: 'n2',
-      title: 'SQL, a quick reference',
-      subject: 'Databases',
-      body: '# SQL, a quick reference\n\nJoins, keys, and a little order in the chaos.\n\n```sql\nSELECT subjects.name, COUNT(tasks.id)\nFROM subjects\nLEFT JOIN tasks ON tasks.subject_id = subjects.id\nGROUP BY subjects.name;\n```',
-      updated: new Date().toISOString(),
-    },
-    {
-      id: 'n3',
-      title: 'Probability essentials',
-      subject: 'Statistics',
-      body: '# Probability essentials\n\nA few useful ideas for the next midterm.\n\n- Sample spaces and events\n- Conditional probability\n- Independent events\n- Expected values',
-      updated: new Date().toISOString(),
-    },
-  ],
-};
+const seed = { tasks: [], notes: [] };
 let state;
 let storageAvailable = true;
 try {
@@ -269,10 +205,10 @@ const views = {
 };
 function navigate() {
   let hash = location.hash.slice(1);
-  if (!demoSession && !['login', 'register'].includes(hash)) {
+  if (!currentUser && !['login', 'register'].includes(hash)) {
     hash = 'login';
     location.replace('#login');
-  } else if (demoSession && ['login', 'register'].includes(hash)) {
+  } else if (currentUser && ['login', 'register'].includes(hash)) {
     hash = 'dashboard';
     location.replace('#dashboard');
   }
@@ -960,11 +896,7 @@ try {
   setTheme('dark');
 }
 function localUsername() {
-  try {
-    return JSON.parse(localStorage.getItem('studyflow.demoSession'))?.username || 'Student';
-  } catch {
-    return 'Student';
-  }
+  return currentUser?.username || 'Student';
 }
 function isSharedSubject(name) {
   return !!name && state.subjects.some((s) => s.name === name && s.role === 'member');
@@ -1120,4 +1052,17 @@ $('#demo-member').onclick = () => {
 initializePreferences();
 hydrateIcons();
 render();
-navigate();
+// La pornire intrebam backend-ul cine e logat, apoi afisam pagina potrivita.
+document.documentElement.style.visibility = 'hidden';
+api('/api/auth/me/')
+  .then((data) => {
+    currentUser = data.user;
+  })
+  .catch(() => {
+    currentUser = null;
+  })
+  .finally(() => {
+    if (currentUser) updateUsername(currentUser.username);
+    navigate();
+    document.documentElement.style.visibility = '';
+  });

@@ -61,7 +61,7 @@ function updateSkillPreview() {
 }
 function openSkillExport(id) {
   const subject = state.subjects.find(s => s.id === id);
-  if(!subject || !demoSession) return;
+  if(!subject || !currentUser) return;
   exportingSubjectId=id;
   $('#skill-name').value=skillSlug(subject.name);
   $('#skill-description').value=`Use when studying ${subject.name} or answering questions covered by its supplied notes.`;
@@ -80,7 +80,7 @@ $('#skill-form').addEventListener('input',updateSkillPreview);
 $('#skill-form').addEventListener('submit',event=>{
   event.preventDefault();
   const result=currentSkillExport();
-  if(!demoSession || !result?.references.length || !$('#skill-form').reportValidity()) return;
+  if(!currentUser || !result?.references.length || !$('#skill-form').reportValidity()) return;
   try {
     const files=[{path:'SKILL.md',body:result.markdown},...result.references].map(file=>({...file,path:`${result.name}/${file.path}`}));
     const url=URL.createObjectURL(skillZip(files)),link=document.createElement('a');
