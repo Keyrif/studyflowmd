@@ -27,6 +27,8 @@ const icons = {
   scan: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 8h10M7 12h10M7 16h6"/>',
   upload: '<path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/>',
   x: '<path d="m6 6 12 12M6 18 18 6"/>',
+  globe:
+    '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
 };
 const $ = (selector) => document.querySelector(selector);
@@ -40,7 +42,11 @@ async function api(path, { method = 'GET', body } = {}) {
   const response = await fetch(path, {
     method,
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken'),
+      'Accept-Language': currentLang,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = response.status === 204 ? null : await response.json().catch(() => null);
@@ -217,7 +223,7 @@ function dueLabel(date) {
       ? 'Today'
       : days === 1
         ? 'Tomorrow'
-        : new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', {
+        : new Date(`${date}T12:00:00`).toLocaleDateString(uiLocale(), {
             day: 'numeric',
             month: 'short',
           });
@@ -231,7 +237,7 @@ function renderTasks(target, filter, limit = Infinity) {
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${taskUrgency(t)} ${t.done ? 'done' : ''}"><input type="checkbox" class="task-check" data-complete="${escapeHTML(t.id)}" ${t.done ? 'checked' : ''} aria-label="Complete ${escapeHTML(t.title)}"><div class="task-info"><button class="task-name" data-edit-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button><div class="task-meta"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span>${escapeHTML(t.subject)}<span>·</span>${escapeHTML(t.kind)}</div></div><span class="due ${t.date <= offsetDate(1) && !t.done ? 'soon' : ''}">${t.done ? 'Completed' : escapeHTML(dueLabel(t.date))}</span><button class="icon-button task-delete" data-delete-task="${escapeHTML(t.id)}" aria-label="Delete ${escapeHTML(t.title)}">${icon('trash')}</button></div>`,
+            `<div class="task-row ${taskUrgency(t)} ${t.done ? 'done' : ''}"><input type="checkbox" class="task-check" data-complete="${escapeHTML(t.id)}" ${t.done ? 'checked' : ''} aria-label="Complete ${escapeHTML(t.title)}"><div class="task-info"><button class="task-name" translate="no" data-edit-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button><div class="task-meta"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span><span translate="no">${escapeHTML(t.subject)}</span><span>·</span>${escapeHTML(t.kind)}</div></div><span class="due ${t.date <= offsetDate(1) && !t.done ? 'soon' : ''}">${t.done ? 'Completed' : escapeHTML(dueLabel(t.date))}</span><button class="icon-button task-delete" data-delete-task="${escapeHTML(t.id)}" aria-label="Delete ${escapeHTML(t.title)}">${icon('trash')}</button></div>`,
         )
         .join('')
     : '<div class="empty">All clear here. A little breathing room.</div>';
@@ -243,7 +249,7 @@ function noteCard(n, recent = false) {
     .filter(Boolean)
     .slice(1)
     .join(' ');
-  return `<div class="${recent ? 'col-md-4' : 'col-md-6 col-xl-4'}"><button class="note-card glass" data-edit-note="${escapeHTML(n.id)}"><div class="note-top"><span class="note-icon">${icon('file')}</span><span class="file-type">.${n.format}</span></div><h3>${escapeHTML(n.title)}</h3><p>${escapeHTML(preview || 'A fresh page, ready for an idea.')}</p><div class="note-bottom"><span class="subject-dot" style="--subject-color:${subjectColor(n.subject)}"></span>${escapeHTML(n.subject)}<time>${new Date(n.updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</time></div></button></div>`;
+  return `<div class="${recent ? 'col-md-4' : 'col-md-6 col-xl-4'}"><button class="note-card glass" data-edit-note="${escapeHTML(n.id)}"><div class="note-top"><span class="note-icon">${icon('file')}</span><span class="file-type">.${n.format}</span></div><h3 translate="no">${escapeHTML(n.title)}</h3><p>${escapeHTML(preview || 'A fresh page, ready for an idea.')}</p><div class="note-bottom"><span class="subject-dot" style="--subject-color:${subjectColor(n.subject)}"></span>${escapeHTML(n.subject)}<time>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: 'numeric', month: 'short' })}</time></div></button></div>`;
 }
 function renderNotes() {
   const query = $('#note-search').value.toLowerCase();
@@ -599,7 +605,7 @@ window.addEventListener('hashchange', navigate);
 function fileTable(notes, showSubject = false) {
   if (!notes.length)
     return '<p class="empty">No files yet. Add a new file or import your notes.</p>';
-  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span>${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil(new Blob([n.body]).size / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span translate="no">${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil(new Blob([n.body]).size / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
 }
 function updateSubjectOptions() {
   ['#task-subject', '#note-subject', '#import-subject'].forEach((selector) => {
@@ -626,7 +632,7 @@ function renderSubjects() {
     (subjectTab === 'personal' ? personal : shared)
       .map(
         (s) =>
-          `<div class="col-md-6"><article class="glass subject-card"><div class="subject-card-top"><span class="note-icon" style="color:${s.color}">${icon('folder')}</span><button class="icon-button" data-subject-settings="${escapeHTML(s.id)}" aria-label="Settings for ${escapeHTML(s.name)}">${icon('settings')}</button></div><a class="subject-title" href="#subject/${encodeURIComponent(s.id)}"><h2>${escapeHTML(s.name)}</h2></a><p>${state.notes.filter((n) => n.subject === s.name).length} files · ${s.role === 'member' ? 'Read only' : s.members.length + ' members'}</p><p class="subject-owner-caption">Owner: ${escapeHTML(s.ownerName)}${s.role === 'owner' ? ' (you)' : ''}</p><div class="subject-skill-actions"><a class="button secondary" href="#subject/${encodeURIComponent(s.id)}">Open subject ${icon('arrow')}</a><button class="button secondary" data-export-skill="${escapeHTML(s.id)}">${icon('spark')} Export as skill</button></div></article></div>`,
+          `<div class="col-md-6"><article class="glass subject-card"><div class="subject-card-top"><span class="note-icon" style="color:${s.color}">${icon('folder')}</span><button class="icon-button" data-subject-settings="${escapeHTML(s.id)}" aria-label="Settings for ${escapeHTML(s.name)}">${icon('settings')}</button></div><a class="subject-title" href="#subject/${encodeURIComponent(s.id)}"><h2 translate="no">${escapeHTML(s.name)}</h2></a><p>${state.notes.filter((n) => n.subject === s.name).length} files · ${s.role === 'member' ? 'Read only' : s.members.length + ' members'}</p><p class="subject-owner-caption">Owner: ${escapeHTML(s.ownerName)}${s.role === 'owner' ? ' (you)' : ''}</p><div class="subject-skill-actions"><a class="button secondary" href="#subject/${encodeURIComponent(s.id)}">Open subject ${icon('arrow')}</a><button class="button secondary" data-export-skill="${escapeHTML(s.id)}">${icon('spark')} Export as skill</button></div></article></div>`,
       )
       .join('') ||
     '<p class="empty">' +
@@ -728,7 +734,7 @@ function renderDeadlines() {
     tasks
       .map(
         (t) =>
-          `<button class="deadline-item" data-edit-task="${escapeHTML(t.id)}"><span><strong>${escapeHTML(t.title)}</strong><small>${escapeHTML(t.subject || 'Unfiled')} · ${escapeHTML(t.kind)}</small></span><time class="due ${t.date <= offsetDate(1) ? 'soon' : ''}">${escapeHTML(dueLabel(t.date))}</time></button>`,
+          `<button class="deadline-item" data-edit-task="${escapeHTML(t.id)}"><span><strong translate="no">${escapeHTML(t.title)}</strong><small>${escapeHTML(t.subject || 'Unfiled')} · ${escapeHTML(t.kind)}</small></span><time class="due ${t.date <= offsetDate(1) ? 'soon' : ''}">${escapeHTML(dueLabel(t.date))}</time></button>`,
       )
       .join('') || '<p class="empty">No upcoming deadlines.</p>';
 }
@@ -766,10 +772,10 @@ function renderCalendar() {
     (monthEvents
       .map(
         (t) =>
-          `<button class="agenda-event ${t.done ? 'event-done' : ''}" data-edit-task="${escapeHTML(t.id)}" style="--event-color:${eventColor(t)}"><time>${new Date(t.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</time><span><strong>${escapeHTML(t.title)}</strong><small>${escapeHTML(t.kind)} · ${escapeHTML(t.subject || 'Unfiled')}</small></span></button>`,
+          `<button class="agenda-event ${t.done ? 'event-done' : ''}" data-edit-task="${escapeHTML(t.id)}" style="--event-color:${eventColor(t)}"><time>${new Date(t.date + 'T12:00:00').toLocaleDateString(uiLocale(), { day: 'numeric', month: 'short' })}</time><span><strong translate="no">${escapeHTML(t.title)}</strong><small>${escapeHTML(t.kind)} · ${escapeHTML(t.subject || 'Unfiled')}</small></span></button>`,
       )
       .join('') || '<p class="empty">No events this month.</p>');
-  $('#calendar-month').textContent = calendarDate.toLocaleDateString('en-GB', {
+  $('#calendar-month').textContent = calendarDate.toLocaleDateString(uiLocale(), {
     month: 'long',
     year: 'numeric',
   });
@@ -788,7 +794,7 @@ function renderCalendar() {
       .map((date) => {
         const key = dateString(date);
         const events = state.tasks.filter((t) => t.date === key);
-        return `<div class="calendar-cell ${date.getMonth() !== month ? 'outside-month' : ''} ${key === offsetDate(0) ? 'is-today' : ''}"><button class="calendar-day" data-calendar-day="${key}" aria-label="Add event on ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}">${date.getDate()}</button>${events.map((t) => `<button style="--event-color:${eventColor(t)}" class="calendar-event ${t.done ? 'event-done' : ''}" data-edit-task="${escapeHTML(t.id)}" title="${escapeHTML(t.kind + ': ' + t.title)}"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span>${escapeHTML(t.title)}<small>${escapeHTML(t.kind)}</small></button>`).join('')}</div>`;
+        return `<div class="calendar-cell ${date.getMonth() !== month ? 'outside-month' : ''} ${key === offsetDate(0) ? 'is-today' : ''}"><button class="calendar-day" data-calendar-day="${key}" aria-label="Add event on ${date.toLocaleDateString(uiLocale(), { day: 'numeric', month: 'long', year: 'numeric' })}">${date.getDate()}</button>${events.map((t) => `<button style="--event-color:${eventColor(t)}" class="calendar-event ${t.done ? 'event-done' : ''}" data-edit-task="${escapeHTML(t.id)}" title="${escapeHTML(t.kind + ': ' + t.title)}"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span>${escapeHTML(t.title)}<small>${escapeHTML(t.kind)}</small></button>`).join('')}</div>`;
       })
       .join('');
 }
@@ -1027,7 +1033,7 @@ function renderAccess(subject) {
     subject.members
       .map(
         (member) =>
-          `<div class="access-member"><div><strong>${escapeHTML(member.name)}</strong><small>Read-only member</small></div><button type="button" class="button danger" data-revoke-member="${escapeHTML(member.id)}">Remove access</button></div>`,
+          `<div class="access-member"><div><strong translate="no">${escapeHTML(member.name)}</strong><small>Read-only member</small></div><button type="button" class="button danger" data-revoke-member="${escapeHTML(member.id)}">Remove access</button></div>`,
       )
       .join('') || '<p class="sharing-help">Only you have access.</p>';
 }
