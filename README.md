@@ -4,7 +4,7 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 ## Tehnologii Utilizate
 - **Backend**: Django 6 (Python 3.12+)
 - **API**: Django REST Framework
-- **OCR**: Tesseract (pytesseract) și Pillow
+- **OCR**: Tesseract (pytesseract) și Pillow 
 - **Frontend**: JavaScript (ES6+), Bootstrap 5, CSS3 Custom Styles
 - **Bază de date**: PostgreSQL
 - **Task Queue**: Celery & Redis (pentru procesări asincrone)
