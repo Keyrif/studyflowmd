@@ -329,7 +329,8 @@ function navigate() {
   $('#breadcrumb').textContent = activeSubject ? activeSubject.name : views[view][0];
   $('#page-title').textContent = activeSubject ? activeSubject.name : views[view][1];
   $('#page-subtitle').textContent = views[view][2];
-  $('#mini-focus').hidden = view === 'dashboard';
+  $('#mini-focus').hidden =
+    view === 'dashboard' || (typeof miniTimerDismissed === 'function' && miniTimerDismissed());
   if (activeSubject) {
     $('#folder-visibility').textContent =
       'Owner: ' +
@@ -386,12 +387,16 @@ document.addEventListener('click', (event) => {
   if (target.dataset.editTask) openTask(target.dataset.editTask);
   if (target.dataset.deleteTask) {
     const id = target.dataset.deleteTask;
-    api(`/api/tasks/${id}/`, { method: 'DELETE' })
+    const row = target.closest('.task-row');
+    Promise.all([api(`/api/tasks/${id}/`, { method: 'DELETE' }), thanosSnap(row)])
       .then(() => {
         state.tasks = state.tasks.filter((t) => t.id !== id);
         render();
       })
-      .catch((error) => toast(error.message));
+      .catch((error) => {
+        if (row) row.style.visibility = '';
+        toast(error.message);
+      });
   }
   if (target.dataset.editNote) openNote(target.dataset.editNote);
   if (target.hasAttribute('data-close')) closeDialog(target.closest('dialog'));
@@ -487,9 +492,14 @@ $('#delete-note').onclick = async () => {
     toast(error.message);
     return;
   }
+  closeDialog($('#note-dialog'));
+  await thanosSnap(
+    [...document.querySelectorAll(`[data-edit-note="${CSS.escape(id)}"]`)].map((el) =>
+      el.closest('.note-card, tr'),
+    ),
+  );
   state.notes = state.notes.filter((n) => n.id !== id);
   render();
-  closeDialog($('#note-dialog'));
 };
 $('#download-note').onclick = () => {
   const url = URL.createObjectURL(
@@ -715,6 +725,18 @@ $('#confirm-delete-subject').onclick = async () => {
     toast(error.message);
     return;
   }
+  closeDialog($('#delete-subject-dialog'));
+  closeDialog($('#subject-dialog'));
+  subjectTab = 'personal';
+  if (location.hash !== '#subjects') {
+    history.replaceState(null, '', '#subjects');
+    navigate();
+  } else renderSubjects();
+  await thanosSnap(
+    document
+      .querySelector(`[data-subject-settings="${CSS.escape(subject.id)}"]`)
+      ?.closest('.subject-card'),
+  );
   state.tasks = state.tasks.filter((t) => t.subject !== subject.name);
   state.notes.forEach((n) => {
     if (n.subject === subject.name) n.subject = '';
@@ -722,9 +744,6 @@ $('#confirm-delete-subject').onclick = async () => {
   state.subjects = state.subjects.filter((s) => s.id !== subject.id);
   activeSubject = null;
   save();
-  closeDialog($('#delete-subject-dialog'));
-  closeDialog($('#subject-dialog'));
-  location.hash = 'subjects';
   render();
   navigate();
 };
@@ -823,6 +842,10 @@ function openImport() {
 $('#folder-new').onclick = () => openNote();
 $('#import-form').onsubmit = async (event) => {
   event.preventDefault();
+  if (typeof currentImportMode === 'function' && currentImportMode() === 'image') {
+    startOcrPreview();
+    return;
+  }
   const files = [...$('#import-file').files];
   const subject = $('#import-subject').value;
   if (isSharedSubject(subject)) {
@@ -830,8 +853,8 @@ $('#import-form').onsubmit = async (event) => {
     return;
   }
   if (!files.length) return;
-  if (files.some((f) => !/\.(md|txt)$/i.test(f.name) || f.size > 1024 * 1024)) {
-    $('#import-error').textContent = 'Use .txt or .md files under 1 MB each. Nothing was imported.';
+  if (files.some((f) => !/\.(md|txt)$/i.test(f.name) || f.size > 10 * 1024 * 1024)) {
+    $('#import-error').textContent = 'Use .txt or .md files under 10 MB each. Nothing was imported.';
     return;
   }
   $('#import-submit').disabled = true;

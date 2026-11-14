@@ -1,0 +1,107 @@
+.mini-focus {
+  cursor: grab;
+  touch-action: none;
+}
+
+body.timer-dragging,
+body.timer-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.timer-ghost {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  z-index: 10001;
+  pointer-events: none;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35) !important;
+  will-change: transform;
+}
+
+.timer-trash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 24, 18, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+.timer-trash-overlay.visible {
+  opacity: 1;
+}
+
+.timer-trash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #e8f1ec;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(40px) scale(0.6);
+  transition:
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.25s ease;
+}
+
+.timer-trash-overlay.visible .timer-trash {
+  opacity: 1;
+  transform: none;
+}
+
+.timer-trash svg {
+  width: 120px;
+  height: 140px;
+  overflow: visible;
+  fill: rgba(255, 255, 255, 0.07);
+  stroke: currentColor;
+  stroke-width: 4;
+  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.35));
+  transition:
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 0.2s ease;
+}
+
+.timer-trash .trash-lid {
+  transform-origin: 20px 30px;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.timer-trash.hot svg {
+  color: #f2908f;
+  transform: scale(1.1);
+}
+
+.timer-trash.hot .trash-lid {
+  transform: rotate(-34deg) translate(-4px, -12px);
+}
+
+.timer-trash.gulp svg {
+  animation: trash-gulp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.timer-trash p {
+  margin: 8px 0 0;
+  font-size: calc(15px * var(--font-scale, 1));
+  font-weight: 600;
+}
+
+.timer-trash small {
+  font-size: calc(11px * var(--font-scale, 1));
+  opacity: 0.75;
+}
+
+@keyframes trash-gulp {
+  0% { transform: scale(1.1); }
+  30% { transform: scale(0.9, 1.12) rotate(-4deg); }
+  60% { transform: scale(1.06, 0.94) rotate(3deg); }
+  100% { transform: scale(1); }
+}

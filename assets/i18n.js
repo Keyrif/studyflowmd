@@ -135,8 +135,17 @@ const I18N_RO = {
   'Bring your notes in.': 'Adu-ți notițele aici.',
   'Add to subject': 'Adaugă la materia',
   'Text or Markdown files': 'Fișiere text sau Markdown',
-  'Select multiple .txt or .md files. Up to 1 MB each. Image OCR comes with the backend.':
-    'Selectează mai multe fișiere .txt sau .md, de maximum 1 MB fiecare. OCR-ul pentru imagini vine în curând.',
+  'Select multiple .txt or .md files, up to 10 MB each.': 'Selectează mai multe fișiere .txt sau .md, de maximum 10 MB fiecare.',
+  Text: 'Text',
+  Image: 'Imagine',
+  'Photos of your notes': 'Fotografii cu notițele tale',
+  'JPG, PNG or WebP photos, up to 10 MB each. Text extraction (OCR) will be connected soon.':
+    'Fotografii JPG, PNG sau WebP, de maximum 10 MB fiecare. Extragerea textului (OCR) va fi conectată în curând.',
+  'Process images': 'Procesează imaginile',
+  'Loading images': 'Se încarcă imaginile',
+  'Splitting your photo into tiles. Text extraction (OCR) will be connected soon.':
+    'Fotografia este împărțită în bucăți (tiles). Extragerea textului (OCR) va fi conectată în curând.',
+  'Use image files under 10 MB each.': 'Folosește imagini de maximum 10 MB fiecare.',
   'A new small step': 'Un nou pas mic',
   'A little adjustment': 'O mică ajustare',
   Task: 'Sarcină',
@@ -230,8 +239,8 @@ const I18N_RO = {
   Sat: 'Sâm',
   Sun: 'Dum',
   'This subject is read-only.': 'Această materie este doar pentru citire.',
-  'Use .txt or .md files under 1 MB each. Nothing was imported.':
-    'Folosește fișiere .txt sau .md sub 1 MB fiecare. Nu s-a importat nimic.',
+  'Use .txt or .md files under 10 MB each. Nothing was imported.':
+    'Folosește fișiere .txt sau .md sub 10 MB fiecare. Nu s-a importat nimic.',
   'A file could not be read. Try again.': 'Un fișier nu a putut fi citit. Încearcă din nou.',
   sage: 'salvie',
   blue: 'albastru',
@@ -270,6 +279,9 @@ const I18N_RO = {
   'Only the owner can change this subject.': 'Doar proprietarul poate modifica această materie.',
   'Shared notes are read-only.': 'Notițele partajate sunt doar pentru citire.',
   'This person is not a member.': 'Această persoană nu este membru.',
+  'Drop the timer here to hide it': 'Lasă cronometrul aici ca să-l ascunzi',
+  'Start it again from Overview to bring it back': 'Pornește-l din nou din Prezentare generală ca să revină',
+  'Timer hidden. Start it from Overview to bring it back.': 'Cronometru ascuns. Pornește-l din Prezentare generală ca să revină.',
 };
 
 const I18N_EN = {
@@ -337,6 +349,7 @@ function translateKeepingSpaces(text) {
 const I18N_SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'PRE', 'CODE']);
 const I18N_ATTRIBUTES = ['placeholder', 'aria-label', 'title'];
 const textSources = new WeakMap();
+const scrambling = new WeakMap();
 const attributeSources = new WeakMap();
 
 function isTranslatable(element) {
@@ -345,6 +358,11 @@ function isTranslatable(element) {
 
 function translateTextNode(node) {
   if (!isTranslatable(node.parentElement)) return;
+  const frame = scrambling.get(node);
+  if (frame !== undefined) {
+    if (node.nodeValue === frame) return;
+    scrambling.delete(node);
+  }
   const current = node.nodeValue;
   let entry = textSources.get(node);
   if (!entry || current !== entry.output) entry = { source: current };
@@ -393,6 +411,70 @@ new MutationObserver((mutations) => {
   attributeFilter: I18N_ATTRIBUTES,
 });
 
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&@';
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function visibleTextNodes() {
+  const nodes = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentElement;
+    if (!/[A-Za-zĂÂÎȘȚăâîșț]/.test(node.nodeValue) || !isTranslatable(parent)) continue;
+    if (!parent.getClientRects().length) continue;
+    nodes.push(node);
+  }
+  return nodes;
+}
+
+function scrambleText(nodes, duration = 520) {
+  const targets = nodes.slice(0, 400).map((node) => ({ node, final: node.nodeValue }));
+  const start = performance.now();
+  const frame = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    targets.forEach((target) => {
+      if (!scrambling.has(target.node) && progress > 0) return;
+      const revealed = Math.floor(progress * target.final.length);
+      const text =
+        progress >= 1
+          ? target.final
+          : [...target.final]
+              .map((char, index) =>
+                index < revealed || /\s/.test(char)
+                  ? char
+                  : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)],
+              )
+              .join('');
+      if (progress >= 1) {
+        scrambling.delete(target.node);
+        target.node.nodeValue = target.final;
+      } else {
+        scrambling.set(target.node, text);
+        target.node.nodeValue = text;
+      }
+    });
+    if (progress < 1) requestAnimationFrame(frame);
+  };
+  targets.forEach((target) => scrambling.set(target.node, target.final));
+  requestAnimationFrame(frame);
+}
+
+function shakeScreen() {
+  if (typeof document.body.animate !== 'function') return;
+  document.body.animate(
+    [
+      { transform: 'translate(0, 0)' },
+      { transform: 'translate(-10px, 4px) rotate(-0.5deg)' },
+      { transform: 'translate(9px, -5px) rotate(0.5deg)' },
+      { transform: 'translate(-7px, -3px) rotate(-0.3deg)' },
+      { transform: 'translate(6px, 4px) rotate(0.3deg)' },
+      { transform: 'translate(-3px, 2px)' },
+      { transform: 'translate(0, 0)' },
+    ],
+    { duration: 450, easing: 'ease-out' },
+  );
+}
+
 function updateLanguageControls() {
   document.documentElement.lang = currentLang;
   const label = document.getElementById('lang-label');
@@ -409,6 +491,9 @@ function setLanguage(lang) {
   updateLanguageControls();
   if (typeof render === 'function' && typeof currentUser !== 'undefined' && currentUser) render();
   translateTree(document.documentElement);
+  if (prefersReducedMotion()) return;
+  scrambleText(visibleTextNodes());
+  shakeScreen();
 }
 
 document.addEventListener('click', (event) => {
