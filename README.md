@@ -2,7 +2,8 @@
 O platformă pentru studenți care permite gestionarea termenelor limită și a examenelor, precum și conversia notițelor scrise de mână, fotografiate sau în format digital, în text Markdown pentru un consum eficient de tokenuri și utilizarea lor inclusiv cu modele AI locale fără suport pentru imagini.
 
 ## Tehnologii Utilizate
-- **Backend**: Django (Python 3.10+)
+- **Backend**: Django 6 (Python 3.12+)
+- **API**: Django REST Framework
 - **Frontend**: JavaScript (ES6+), Bootstrap 5, CSS3 Custom Styles
 - **Bază de date**: PostgreSQL
 - **Task Queue**: Celery & Redis (pentru procesări asincrone)
