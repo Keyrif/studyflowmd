@@ -49,3 +49,9 @@ Toate aceste zone sunt incluse în procesarea imaginii. Extragerea textului prin
 Multe modele populare care rulează local, precum **Qwen3**, **Llama 3.1** și **DeepSeek-R1**, acceptă doar text, fără posibilitatea de a interpreta direct imagini.
 
 Prin extragerea notițelor cu **OCR** și salvarea lor în text, **StudyFlowMD** permite folosirea acestora și cu modele fără suport pentru imagini. Studentul poate importa textul într-un model local pentru explicații, rezumate și întrebări de recapitulare.
+
+## Creeare SKILL.md
+Transformă o materie într-un fișier SKILL.md pentru AI cu instrucțiuni personalizate, precum explicații pas cu pas sau afișarea formulelor, descarcand toate notițele ca referințe.
+
+<img width="645" height="1101" alt="image" src="https://github.com/user-attachments/assets/9a26739f-7929-4662-b77c-076eb1e5b033" />
+
