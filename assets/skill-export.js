@@ -9,6 +9,8 @@ const skillOptions = [
   ['answer', 'Highlight the final answer', 'Clearly highlight the final answer after the explanation.', true]
 ];
 let exportingSubjectId = null;
+// Every note of the subject being exported, with full text, fetched when the dialog opens.
+let exportNotes = [];
 const skillSlug = value => String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0,64).replace(/-$/, '') || 'study-skill';
 
 function skillReferences(notes) {
@@ -48,7 +50,7 @@ function skillZip(files) {
 function currentSkillExport() {
   const subject = state.subjects.find(s => s.id === exportingSubjectId);
   if(!subject) return null;
-  const references = skillReferences(state.notes.filter(note => note.subject === subject.name));
+  const references = skillReferences(exportNotes);
   const name = $('#skill-name').value.trim();
   const markdown = buildSkillMarkdown(name,$('#skill-description').value.trim(),skillOptions.filter(([id]) => $('#skill-'+id).checked).map(([id]) => id),$('#skill-extra').value,references);
   return {name,markdown,references};
@@ -59,14 +61,17 @@ function updateSkillPreview() {
   $('#skill-download').disabled = !result?.references.length;
   $('#skill-error').textContent = result?.references.length ? '' : 'Add at least one text or Markdown file to this subject before exporting.';
 }
-function openSkillExport(id) {
+async function openSkillExport(id) {
   const subject = state.subjects.find(s => s.id === id);
   if(!subject || !currentUser) return;
+  // The browser only holds pages of light notes, so ask the server for this subject's full notes.
+  try { exportNotes = (await api(`/api/notes/export/?subject=${encodeURIComponent(id)}`)).map(noteFromApi); }
+  catch (error) { toast(error.message); return; }
   exportingSubjectId=id;
   $('#skill-name').value=skillSlug(subject.name);
   $('#skill-description').value=`Use when studying ${subject.name} or answering questions covered by its supplied notes.`;
   $('#skill-extra').value='';
-  const count=state.notes.filter(n=>n.subject===subject.name).length;
+  const count=exportNotes.length;
   $('#skill-summary').textContent=`${subject.name} · ${count} saved file${count===1?'':'s'}`;
   $('#skill-options').innerHTML=skillOptions.map(([key,label,,checked])=>`<label class="skill-option"><input type="checkbox" id="skill-${key}" ${checked?'checked':''}><span>${label}</span></label>`).join('');
   $('#skill-dialog details').open=false;

@@ -1,13 +1,24 @@
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 User = get_user_model()
+
+
+def username_error(username):
+    """Run the same checks the User model applies (allowed characters, max length)."""
+    try:
+        User._meta.get_field('username').run_validators(username)
+    except ValidationError as error:
+        return ' '.join(error.messages)
+    return None
 
 
 def user_data(user):
@@ -27,6 +38,8 @@ class MeView(APIView):
 @method_decorator(csrf_protect, name='dispatch')
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
 
     def post(self, request):
         username = str(request.data.get('username', '')).strip()
@@ -35,6 +48,14 @@ class RegisterView(APIView):
 
         if not username or not email or not password:
             return Response({'error': 'Username, email and password are required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        problem = username_error(username)
+        if problem:
+            return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response({'error': 'Enter a valid email address.'},
                             status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(username__iexact=username).exists():
             return Response({'error': 'That username is already taken.'},
@@ -59,6 +80,8 @@ class RegisterView(APIView):
 @method_decorator(csrf_protect, name='dispatch')
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
 
     def post(self, request):
         identifier = str(request.data.get('login', '')).strip()

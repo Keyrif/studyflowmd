@@ -99,6 +99,7 @@ function subjectFromApi(s) {
     ownerName: s.owner_name,
     inviteCode: s.invite_code || '',
     members: (s.members || []).map((m) => ({ id: String(m.id), name: m.username })),
+    noteCount: s.note_count ?? 0,
   };
 }
 function taskFromApi(t) {
@@ -123,16 +124,94 @@ function taskToApi(t) {
     done: t.done,
   };
 }
+// Lists from the server carry only a preview and a size; the full text (`body`) arrives
+// when a single note is opened. A note without `body` has simply not been loaded yet.
 function noteFromApi(n) {
-  return {
+  const note = {
     id: String(n.id),
     title: n.title,
     subject: state.subjects.find((s) => s.id === String(n.subject))?.name || '',
-    body: n.body,
     format: n.format,
     updated: n.updated,
     opened: localPrefs.opened[String(n.id)],
+    preview: n.preview ?? (n.body || '').slice(0, 240),
+    size: n.size ?? new Blob([n.body || '']).size,
   };
+  if (typeof n.body === 'string') note.body = n.body;
+  return note;
+}
+// Keep one copy of each note in state.notes, however many lists it appears in.
+function rememberNote(note) {
+  const known = state.notes.find((n) => n.id === note.id);
+  if (!known) {
+    state.notes.push(note);
+    return note;
+  }
+  if (note.body === undefined && known.updated !== note.updated) delete known.body;
+  Object.assign(known, note, { opened: known.opened });
+  return known;
+}
+
+// Paged note lists: the library (optionally searched) and the open subject's files.
+const noteLists = {};
+function resetNoteLists() {
+  ['library', 'subject'].forEach((name) => {
+    noteLists[name] = { ids: [], page: 0, count: 0, hasMore: false, loading: false, params: {}, request: 0 };
+  });
+}
+resetNoteLists();
+async function loadNotes(name, params, reset = false) {
+  const list = noteLists[name];
+  if (reset) {
+    Object.assign(list, { ids: [], page: 0, count: 0, hasMore: true, params, request: list.request + 1 });
+  }
+  if (!list.hasMore || (list.loading && !reset)) return;
+  const request = list.request;
+  list.loading = true;
+  renderNotes();
+  const query = new URLSearchParams({ page: String(list.page + 1) });
+  Object.entries(list.params).forEach(([key, value]) => value && query.set(key, value));
+  try {
+    const data = await api(`/api/notes/?${query}`);
+    if (request !== list.request) return; // a newer search replaced this request
+    data.results.forEach((n) => {
+      const note = rememberNote(noteFromApi(n));
+      if (!list.ids.includes(note.id)) list.ids.push(note.id);
+    });
+    Object.assign(list, { page: list.page + 1, count: data.count, hasMore: Boolean(data.next) });
+  } catch (error) {
+    if (request === list.request) list.hasMore = false;
+    toast(error.message);
+  } finally {
+    if (request === list.request) list.loading = false;
+    renderNotes();
+  }
+}
+const listedNotes = (name) =>
+  noteLists[name].ids.map((id) => state.notes.find((n) => n.id === id)).filter(Boolean);
+// A note created here goes to the top of the lists it belongs in, without reloading them.
+function showNewNote(note) {
+  const library = noteLists.library;
+  if (!library.params.search && !library.ids.includes(note.id)) {
+    library.ids.unshift(note.id);
+    library.count += 1;
+  }
+  const subjectId = state.subjects.find((s) => s.name === note.subject)?.id;
+  const subject = noteLists.subject;
+  if (subjectId && subject.params.subject === subjectId && !subject.ids.includes(note.id)) {
+    subject.ids.unshift(note.id);
+    subject.count += 1;
+  }
+}
+// File counts on subject cards come from the server, so ask again after notes change.
+async function refreshNoteCounts() {
+  try {
+    (await api('/api/subjects/')).forEach((fresh) => {
+      const known = state.subjects.find((s) => s.id === String(fresh.id));
+      if (known) known.noteCount = fresh.note_count;
+    });
+    renderSubjects();
+  } catch {}
 }
 function noteToApi(n) {
   const subject = state.subjects.find((s) => s.name === n.subject && s.role === 'owner');
@@ -165,19 +244,17 @@ function applySubjectOrder() {
 }
 async function loadWorkspace() {
   loadPrefs();
-  const [subjects, tasks, notes] = await Promise.all([
-    api('/api/subjects/'),
-    api('/api/tasks/'),
-    api('/api/notes/'),
-  ]);
+  const [subjects, tasks] = await Promise.all([api('/api/subjects/'), api('/api/tasks/')]);
   state.subjects = subjects.map(subjectFromApi);
   applySubjectOrder();
   state.tasks = tasks.map(taskFromApi);
-  state.notes = notes.map(noteFromApi);
+  // Only the first page of notes; the rest loads when the user asks for it.
+  await loadNotes('library', {}, true);
 }
 async function startSession(user) {
   currentUser = user;
   state = { tasks: [], subjects: [], notes: [] };
+  resetNoteLists();
   if (!user) return;
   updateUsername(user.username);
   try {
@@ -208,7 +285,9 @@ function toast(message) {
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => ($('#toast').hidden = true), 4500);
 }
-const subjectColor = (name) => state.subjects.find((s) => s.name === name)?.color || '#89a392';
+// Colors are written into style attributes, so anything that is not a plain hex color is ignored.
+const safeColor = (color) => (/^#[0-9a-f]{6}$/i.test(color || '') ? color : '#89a392');
+const subjectColor = (name) => safeColor(state.subjects.find((s) => s.name === name)?.color);
 let subjectTab = 'personal';
 let activeSubject = null;
 let currentView = 'dashboard';
@@ -243,7 +322,7 @@ function renderTasks(target, filter, limit = Infinity) {
     : '<div class="empty">All clear here. A little breathing room.</div>';
 }
 function noteCard(n, recent = false) {
-  const preview = n.body
+  const preview = (n.body ?? n.preview ?? '')
     .replace(/[#*`>]/g, '')
     .split('\n')
     .filter(Boolean)
@@ -251,23 +330,30 @@ function noteCard(n, recent = false) {
     .join(' ');
   return `<div class="${recent ? 'col-md-4' : 'col-md-6 col-xl-4'}"><button class="note-card glass" data-edit-note="${escapeHTML(n.id)}"><div class="note-top"><span class="note-icon">${icon('file')}</span><span class="file-type">.${n.format}</span></div><h3 translate="no">${escapeHTML(n.title)}</h3><p>${escapeHTML(preview || 'A fresh page, ready for an idea.')}</p><div class="note-bottom"><span class="subject-dot" style="--subject-color:${subjectColor(n.subject)}"></span>${escapeHTML(n.subject)}<time>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: 'numeric', month: 'short' })}</time></div></button></div>`;
 }
+// The table for one paged list, with a loading state and a "Load more" button underneath.
+function pagedFileTable(name, notes, showSubject) {
+  const list = noteLists[name];
+  if (!notes.length && list.loading) return '<p class="empty">Loading notes…</p>';
+  if (!notes.length && list.params.search) return '<p class="empty">No notes match your search.</p>';
+  const more = list.hasMore
+    ? `<div class="load-more"><button class="button secondary" data-load-more="${name}" ${list.loading ? 'disabled' : ''}>${list.loading ? 'Loading notes…' : 'Load more'}</button><small>${notes.length} / ${list.count}</small></div>`
+    : '';
+  return fileTable(notes, showSubject) + more;
+}
 function renderNotes() {
-  const query = $('#note-search').value.toLowerCase();
-  const sorted = [...state.notes].sort((a, b) =>
+  const recent = [...state.notes].sort((a, b) =>
     (b.opened || b.updated).localeCompare(a.opened || a.updated),
   );
   $('#recent-notes').innerHTML =
-    sorted
+    recent
       .slice(0, 3)
       .map((n) => noteCard(n, true))
       .join('') || '<p class="empty">Your next idea belongs here. Add a note in the library.</p>';
-  $('#all-notes').innerHTML = fileTable(
-    sorted.filter((n) => `${n.title} ${n.subject} ${n.body}`.toLowerCase().includes(query)),
-    true,
-  );
+  $('#all-notes').innerHTML = pagedFileTable('library', listedNotes('library'), true);
   if (activeSubject)
-    $('#subject-files').innerHTML = fileTable(
-      sorted.filter((n) => n.subject === activeSubject.name),
+    $('#subject-files').innerHTML = pagedFileTable(
+      'subject',
+      listedNotes('subject').filter((n) => n.subject === activeSubject.name),
     );
 }
 function render() {
@@ -337,7 +423,10 @@ function navigate() {
       activeSubject.ownerName +
       (activeSubject.role === 'member' ? ' · Read only' : ' · You');
     $('#folder-import').hidden = $('#folder-new').hidden = activeSubject.role === 'member';
-    renderNotes();
+    // Each subject asks the server for its own files, page by page.
+    if (noteLists.subject.params.subject !== activeSubject.id)
+      loadNotes('subject', { subject: activeSubject.id }, true);
+    else renderNotes();
   }
   closeDeadlines();
 }
@@ -356,8 +445,17 @@ function openTask(id, date) {
   $('#task-dialog').showModal();
   $('#task-title').focus();
 }
-function openNote(id, imported) {
+async function openNote(id, imported) {
   const note = state.notes.find((n) => n.id === id) || imported;
+  // Lists only carry a preview, so fetch the full text the first time a note is opened.
+  if (note?.id && note.body === undefined) {
+    try {
+      Object.assign(note, noteFromApi(await api(`/api/notes/${encodeURIComponent(note.id)}/`)));
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
+  }
   if (note?.id) {
     note.opened = new Date().toISOString();
     save();
@@ -399,6 +497,7 @@ document.addEventListener('click', (event) => {
       });
   }
   if (target.dataset.editNote) openNote(target.dataset.editNote);
+  if (target.dataset.loadMore) loadNotes(target.dataset.loadMore);
   if (target.hasAttribute('data-close')) closeDialog(target.closest('dialog'));
   if (target.dataset.subjectSettings) openSubject(target.dataset.subjectSettings);
   if (target.dataset.calendarDay) openTask(null, target.dataset.calendarDay);
@@ -474,12 +573,13 @@ $('#note-form').addEventListener('submit', async (event) => {
         : await api('/api/notes/', { method: 'POST', body: noteToApi(note) }),
     );
     if (existing) Object.assign(existing, fresh, { opened: existing.opened });
-    else state.notes.push(fresh);
+    else showNewNote(rememberNote(fresh));
   } catch (error) {
     toast(error.message);
     return;
   }
   render();
+  refreshNoteCounts();
   closeDialog($('#note-dialog'));
   toast('Your note is saved.');
 });
@@ -499,7 +599,11 @@ $('#delete-note').onclick = async () => {
     ),
   );
   state.notes = state.notes.filter((n) => n.id !== id);
+  ['library', 'subject'].forEach((name) => {
+    if (noteLists[name].ids.includes(id)) noteLists[name].count -= 1;
+  });
   render();
+  refreshNoteCounts();
 };
 $('#download-note').onclick = () => {
   const url = URL.createObjectURL(
@@ -520,22 +624,30 @@ $('#download-note').onclick = () => {
 $('#new-subject').onclick = () => openSubject();
 $('#new-note').onclick = () => openNote();
 $('#task-filter').onchange = render;
-$('#note-search').oninput = renderNotes;
+// Search runs on the server, a moment after typing stops, instead of on every key press.
+let searchTimer;
+$('#note-search').oninput = () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(
+    () => loadNotes('library', { search: $('#note-search').value.trim() }, true),
+    300,
+  );
+};
 let acrylicDark = true;
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   if (theme !== 'cs') acrylicDark = theme === 'dark';
-  $('#theme-label').textContent = theme === 'cs' ? 'Counter-Strike 1.6' : 'Acrylic';
+  $('#theme-label').textContent = theme === 'cs' ? 'Counter-Strike 1.6' : 'Material';
   $('#theme-switch').setAttribute(
     'aria-label',
-    theme === 'cs' ? 'Switch to Acrylic theme' : 'Switch to Counter-Strike theme',
+    theme === 'cs' ? 'Switch to Material theme' : 'Switch to Counter-Strike theme',
   );
   $('#theme-switch').setAttribute('aria-pressed', String(theme === 'cs'));
   $('#dark-switch').hidden = theme === 'cs';
   $('#dark-switch').setAttribute('aria-pressed', String(acrylicDark));
   $('#dark-label').textContent = acrylicDark ? 'Light mode' : 'Dark mode';
   $('meta[name="theme-color"]').content =
-    theme === 'cs' ? '#3e4637' : theme === 'dark' ? '#17211f' : '#e8eeeb';
+    theme === 'cs' ? '#3e4637' : theme === 'dark' ? '#170c22' : '#f7eaff';
 }
 function rememberTheme(theme) {
   setTheme(theme);
@@ -615,7 +727,7 @@ window.addEventListener('hashchange', navigate);
 function fileTable(notes, showSubject = false) {
   if (!notes.length)
     return '<p class="empty">No files yet. Add a new file or import your notes.</p>';
-  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span translate="no">${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil(new Blob([n.body]).size / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span translate="no">${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil((n.size || 0) / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
 }
 function updateSubjectOptions() {
   ['#task-subject', '#note-subject', '#import-subject'].forEach((selector) => {
@@ -642,7 +754,7 @@ function renderSubjects() {
     (subjectTab === 'personal' ? personal : shared)
       .map(
         (s) =>
-          `<div class="col-md-6"><article class="glass subject-card"><div class="subject-card-top"><span class="note-icon" style="color:${s.color}">${icon('folder')}</span><button class="icon-button" data-subject-settings="${escapeHTML(s.id)}" aria-label="Settings for ${escapeHTML(s.name)}">${icon('settings')}</button></div><a class="subject-title" href="#subject/${encodeURIComponent(s.id)}"><h2 translate="no">${escapeHTML(s.name)}</h2></a><p>${state.notes.filter((n) => n.subject === s.name).length} files · ${s.role === 'member' ? 'Read only' : s.members.length + ' members'}</p><p class="subject-owner-caption">Owner: ${escapeHTML(s.ownerName)}${s.role === 'owner' ? ' (you)' : ''}</p><div class="subject-skill-actions"><a class="button secondary" href="#subject/${encodeURIComponent(s.id)}">Open subject ${icon('arrow')}</a><button class="button secondary" data-export-skill="${escapeHTML(s.id)}">${icon('spark')} Export as skill</button></div></article></div>`,
+          `<div class="col-md-6"><article class="glass subject-card"><div class="subject-card-top"><span class="note-icon" style="color:${safeColor(s.color)}">${icon('folder')}</span><button class="icon-button" data-subject-settings="${escapeHTML(s.id)}" aria-label="Settings for ${escapeHTML(s.name)}">${icon('settings')}</button></div><a class="subject-title" href="#subject/${encodeURIComponent(s.id)}"><h2 translate="no">${escapeHTML(s.name)}</h2></a><p>${s.noteCount} files ·${s.role === 'member' ? 'Read only' : s.members.length + ' members'}</p><p class="subject-owner-caption">Owner: ${escapeHTML(s.ownerName)}${s.role === 'owner' ? ' (you)' : ''}</p><div class="subject-skill-actions"><a class="button secondary" href="#subject/${encodeURIComponent(s.id)}">Open subject ${icon('arrow')}</a><button class="button secondary" data-export-skill="${escapeHTML(s.id)}">${icon('spark')} Export as skill</button></div></article></div>`,
       )
       .join('') ||
     '<p class="empty">' +
@@ -870,8 +982,9 @@ $('#import-form').onsubmit = async (event) => {
     const notes = await Promise.all(
       drafts.map((draft) => api('/api/notes/', { method: 'POST', body: noteToApi(draft) })),
     );
-    state.notes.push(...notes.map(noteFromApi));
+    notes.forEach((n) => showNewNote(rememberNote(noteFromApi(n))));
     render();
+    refreshNoteCounts();
     closeDialog($('#import-dialog'));
     toast(`${notes.length} file${notes.length === 1 ? '' : 's'} imported.`);
   } catch (error) {
@@ -1092,6 +1205,8 @@ $('#join-form').onsubmit = async (event) => {
     $('#join-error').textContent = error.message;
     return;
   }
+  // The joined subject's notes now belong in the library too.
+  loadNotes('library', noteLists.library.params, true);
   subjectTab = 'shared';
   render();
   closeDialog($('#join-dialog'));
@@ -1126,6 +1241,7 @@ $('#leave-subject').onclick = () => {
       }
       state.subjects = state.subjects.filter((s) => s.id !== subject.id);
       state.notes = state.notes.filter((n) => n.subject !== subject.name);
+      loadNotes('library', noteLists.library.params, true);
       state.tasks.forEach((t) => {
         if (t.subject === subject.name) t.subject = '';
       });

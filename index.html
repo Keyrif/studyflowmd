@@ -2,8 +2,10 @@
 <html lang="ro" data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#17211f"><meta name="description" content="Your subjects, deadlines, and study notes. A calmer place to learn.">
+  <meta name="theme-color" content="#170c22"><meta name="description" content="Your subjects, deadlines, and study notes. A calmer place to learn.">
   <title>StudyFlowMD — Your study space</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,300..800&display=swap">
   <link rel="stylesheet" href="assets/vendor/bootstrap.min.css"><link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/refinements.css">
   <link rel="stylesheet" href="assets/experience.css">
@@ -13,6 +15,7 @@
   <link rel="stylesheet" href="assets/icon-motion.css">
   <link rel="stylesheet" href="assets/timer-trash.css">
   <link rel="stylesheet" href="assets/ocr-preview.css">
+  <link rel="stylesheet" href="assets/material3.css">
   <script src="assets/i18n.js" defer></script>
   <script src="assets/snap.js" defer></script>
   <script src="assets/app.js" defer></script>
@@ -49,7 +52,7 @@
         <a href="#notes" data-view="notes"><span data-icon="file"></span>Notes library</a>
         <a href="#subjects" data-view="subjects"><span data-icon="book"></span>Subjects</a>
       <a href="#calendar" data-view="calendar"><span data-icon="calendar"></span>Calendar</a><button id="sidebar-import"><span data-icon="upload"></span>Import notes</button><button id="mobile-more" aria-expanded="false" aria-controls="appearance-panel"><span data-icon="settings"></span>More</button></nav>
-      <div class="sidebar-bottom" id="appearance-panel"><button id="mobile-import" class="theme-switch"><span data-icon="upload"></span><span>Import notes</span></button><div class="theme-caption">MAKE IT YOURS</div><button id="theme-switch" class="theme-switch" aria-label="Switch to Counter-Strike theme"><span data-icon="sun"></span><span id="theme-label">Acrylic</span><span class="switch-track"><span></span></span></button><button id="font-settings" class="theme-switch"><span data-icon="type"></span><span>Font size</span><span id="font-size-label">100%</span></button><button id="dark-switch" class="theme-switch" aria-label="Toggle dark acrylic" aria-pressed="false"><span data-icon="moon"></span><span id="dark-label">Dark mode</span></button><button id="lang-switch" class="theme-switch" aria-label="Change language"><span data-icon="globe"></span><span>Language</span><span id="lang-label" translate="no">RO</span></button><div class="local-status"><span></span>Synced with server <small>v0.1</small></div></div>
+      <div class="sidebar-bottom" id="appearance-panel"><button id="mobile-import" class="theme-switch"><span data-icon="upload"></span><span>Import notes</span></button><div class="theme-caption">MAKE IT YOURS</div><button id="theme-switch" class="theme-switch" aria-label="Switch to Counter-Strike theme"><span data-icon="sun"></span><span id="theme-label">Material</span><span class="switch-track"><span></span></span></button><button id="font-settings" class="theme-switch"><span data-icon="type"></span><span>Font size</span><span id="font-size-label">100%</span></button><button id="dark-switch" class="theme-switch" aria-label="Toggle dark mode" aria-pressed="false"><span data-icon="moon"></span><span id="dark-label">Dark mode</span></button><button id="lang-switch" class="theme-switch" aria-label="Change language"><span data-icon="globe"></span><span>Language</span><span id="lang-label" translate="no">RO</span></button><div class="local-status"><span></span>Material 3 Expressive <small>v0.1</small></div></div>
     </aside>
     <button id="mobile-dismiss" aria-label="Close appearance menu" hidden></button><main>
       <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="topbar-right"><div class="deadline-control"><button class="button secondary" id="deadlines-toggle" aria-expanded="false" aria-controls="deadlines-popup"><span data-icon="calendar"></span>Deadlines <span id="deadline-count"></span></button><section id="deadlines-popup" class="glass deadline-popup" aria-label="Upcoming deadlines" hidden><div class="panel-heading"><h2>Upcoming deadlines</h2><button class="icon-button" id="deadlines-close" aria-label="Close deadlines"><span data-icon="x"></span></button></div><div id="deadline-list"></div><a class="button secondary" href="#calendar">Open calendar</a></section></div><a class="button secondary" href="#subjects"><span data-icon="book"></span><span id="subject-count">4 subjects</span></a></div><div id="mini-focus" class="glass mini-focus" hidden><button id="mini-duration" aria-label="Change focus duration"><span data-icon="clock"></span><span id="mini-time">25:00</span></button><button id="mini-toggle" class="icon-button" aria-label="Start focus timer"><span data-icon="play"></span></button><button id="mini-reset" class="icon-button" aria-label="Reset focus timer"><span data-icon="reset"></span></button></div></header>

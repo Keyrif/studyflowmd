@@ -1,11 +1,23 @@
-from django.db.models import Q
+from django.db.models import Count, Func, IntegerField, Q
+from django.db.models.functions import Substr
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 from .models import Note, Subject, Task, generate_invite_code
-from .serializers import NoteSerializer, SubjectSerializer, TaskSerializer
+from .pagination import NotePagination
+from .serializers import NoteListSerializer, NoteSerializer, SubjectSerializer, TaskSerializer
+
+PREVIEW_LENGTH = 240
+
+
+class OctetLength(Func):
+    """PostgreSQL's OCTET_LENGTH: the size of a text in bytes, computed inside the database."""
+
+    function = 'OCTET_LENGTH'
+    output_field = IntegerField()
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -20,17 +32,61 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 
 class NoteViewSet(viewsets.ModelViewSet):
-    serializer_class = NoteSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    """Notes the user wrote, plus notes in subjects they joined.
 
-    def get_queryset(self):
+    GET /api/notes/                  one page of light notes (no full text)
+        ?page=2                      the next page
+        ?subject=5                   only notes in subject 5
+        ?search=matrix               only notes whose title, text, or subject matches
+    GET /api/notes/12/               one full note, with its text
+    GET /api/notes/export/?subject=5 every full note in subject 5 (for the skill ZIP)
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = NotePagination
+
+    def get_serializer_class(self):
+        return NoteListSerializer if self.action == 'list' else NoteSerializer
+
+    def visible_notes(self):
         user = self.request.user
+        # '-id' breaks ties between notes saved at the same moment. Without a fully
+        # stable order, a note could show up on two pages or on none.
         return (
             Note.objects.filter(Q(user=user) | Q(subject__members=user))
             .distinct()
             .select_related('subject')
-            .order_by('-updated')
+            .order_by('-updated', '-id')
         )
+
+    def subject_filter(self, notes, required=False):
+        raw = self.request.query_params.get('subject')
+        if raw in (None, ''):
+            if required:
+                raise ValidationError({'subject': 'Choose a subject.'})
+            return notes
+        try:
+            return notes.filter(subject_id=int(raw))
+        except ValueError:
+            raise ValidationError({'subject': 'Unknown subject.'})
+
+    def get_queryset(self):
+        notes = self.visible_notes()
+        if self.action != 'list':
+            return notes
+        notes = self.subject_filter(notes)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            notes = notes.filter(
+                Q(title__icontains=search) | Q(body__icontains=search) | Q(subject__name__icontains=search)
+            )
+        # Let PostgreSQL cut the preview and measure the size, and don't load the full text.
+        return notes.annotate(preview=Substr('body', 1, PREVIEW_LENGTH), size=OctetLength('body')).defer('body')
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        notes = self.subject_filter(self.visible_notes(), required=True)
+        return Response(NoteSerializer(notes, many=True, context=self.get_serializer_context()).data)
 
     def _require_author(self, note):
         if note.user_id != self.request.user.id:
@@ -51,6 +107,7 @@ class NoteViewSet(viewsets.ModelViewSet):
 class SubjectViewSet(viewsets.ModelViewSet):
     serializer_class = SubjectSerializer
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = None  # set to 'join' on the join action below
 
     def get_queryset(self):
         user = self.request.user
@@ -59,6 +116,8 @@ class SubjectViewSet(viewsets.ModelViewSet):
             .distinct()
             .select_related('owner')
             .prefetch_related('members')
+            # Count each subject's notes in the same query, instead of one query per subject.
+            .annotate(counted_notes=Count('note', distinct=True))
             .order_by('id')
         )
 
@@ -75,9 +134,13 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         self._require_owner(instance)
+        # Members' own tasks are theirs: keep them as unfiled instead of letting the
+        # owner's delete cascade into other people's data. The owner's tasks go with it.
+        Task.objects.filter(subject=instance).exclude(user=instance.owner).update(subject=None)
         instance.delete()
 
-    @action(detail=False, methods=['post'])
+    # Rate-limited so invitation codes cannot be guessed by trying thousands per minute.
+    @action(detail=False, methods=['post'], throttle_classes=[ScopedRateThrottle], throttle_scope='join')
     def join(self, request):
         code = str(request.data.get('code', '')).strip().upper()
         subject = Subject.objects.filter(invite_code=code, public=True).first()
@@ -111,7 +174,11 @@ class SubjectViewSet(viewsets.ModelViewSet):
     def remove_member(self, request, pk=None):
         subject = self.get_object()
         self._require_owner(subject)
-        member = subject.members.filter(pk=request.data.get('user_id')).first()
+        try:
+            user_id = int(request.data.get('user_id'))
+        except (TypeError, ValueError):
+            return Response({'error': 'This person is not a member.'}, status=status.HTTP_404_NOT_FOUND)
+        member = subject.members.filter(pk=user_id).first()
         if member is None:
             return Response({'error': 'This person is not a member.'}, status=status.HTTP_404_NOT_FOUND)
         subject.members.remove(member)

@@ -87,7 +87,7 @@ function renderAuth(mode){
   $('#auth-email').type=registering?'email':'text';
   $('#auth-email').placeholder=registering?'you@university.edu':'you@university.edu or username';
   ['login','register'].forEach(tab=>{const link=$('#'+tab+'-tab');link.classList.toggle('active',tab===mode);if(tab===mode)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
-  $('#auth-theme').textContent=document.documentElement.dataset.theme==='cs'?'Switch to acrylic':'Switch light / dark';
+  $('#auth-theme').textContent=document.documentElement.dataset.theme==='cs'?'Switch to Material':'Switch light / dark';
 }
 function updateUsername(username){
   $('#account-name').textContent=username;

@@ -1,49 +1,80 @@
-# Frontend prototype
+# Frontend guide
 
-Open `index.html` directly, or run `node preview.mjs` and visit http://127.0.0.1:4173.
+This file is for developers working on the StudyFlowMD interface: how to run it, how the files are organised, and what the frontend does. The README describes the project itself.
 
-Run `node --test frontend.test.cjs` for migration, subject lifecycle, multi-file import, calendar selection, and theme-state checks. These exercise local state; visual checks are done in the browser.
+## Running it
+
+The frontend is served by Django together with the API, so run the whole app:
+
+1. Copy `.env.example` to `.env` and fill in the values (database password, `DJANGO_SECRET_KEY`).
+2. Start everything with Docker: `docker compose up --build`, then open http://localhost:8000.
+
+`node preview.mjs` (http://127.0.0.1:4173) serves only the static files, with no API behind them. It is useful for checking layout and styles, but signing in and loading data will not work there.
+
+## How it is built
 
 Plain ES6+ JavaScript, locally bundled Bootstrap 5.3.3 CSS, and separate custom CSS. No React, build step, or package installation. Bootstrap is distributed under the MIT license; its license banner is retained in the vendor file.
 
-## Available now
+- `index.html` holds all the markup: the sidebar, every view, and every dialog.
+- `assets/app.js` holds the application state, rendering, and all calls to the Django API (`/api/...`).
+- `assets/experience.js` handles sign-in, registration, and logout.
+- `assets/i18n.js` translates the interface between English and Romanian.
+- `assets/styles.css` holds the base layout and the themes, switched with the `data-theme` attribute on `<html>`. The other CSS files each add one layer on top, and `material3.css` is loaded last.
 
-- Responsive overview, tasks, notes library, and subjects.
-- Light and dark acrylic, plus a Counter-Strike 1.6 VGUI-inspired theme, selected from the bottom of the sidebar.
-- Minimal overview with recently opened files first; upcoming deadlines in a chronological popup and a subject-count shortcut in the header.
-- PERSONAL / SHARED collections. Subject cards and settings display the saved owner's name.
-- Owners create/rename subjects, open or close invitations, reset invitation codes, and revoke individual memberships. Closing invitations or resetting a code preserves existing memberships. Owner deletion preserves personal files and deadlines as unfiled.
-- Members have read-only files and a Leave subject action, with confirmation. Leaving removes the local shared collection and keeps personal content intact.
-- To try joining locally, use `STUDY-DEMO` (Alex Morgan's sample collection). Owner settings include Add demo member for trying removal. All memberships persist in the browser; generated owner codes are not yet redeemable by other accounts or devices.
-- Explorer-style file lists within each subject and the notes library, with name, modified date, type, and size columns.
+All data (accounts, subjects, tasks, notes, memberships) lives in PostgreSQL and is reached through the API.
+
+Notes are paginated so the app stays fast with thousands of them. `/api/notes/` returns 30 at a time with only a short preview and the size; the full text is fetched when a note is opened, and the skill export uses `/api/notes/export/?subject=<id>`. Search and the per-subject file list run on the server. `state.notes` is a cache of whatever has been loaded, and `noteLists` tracks which notes each paged list shows. Tasks and subjects are small and are loaded in full, because the calendar, counters, and deadline popup need all of them. The browser's `localStorage` only keeps personal preferences: theme, font size, language, subject order, recently opened notes, and whether the mini timer was dismissed.
+
+## Security notes for frontend code
+
+- Every piece of user text is passed through `escapeHTML()` before it is inserted with `innerHTML`. Keep doing this for any new template.
+- Colors that come from the server go through `safeColor()` before being written into a `style` attribute.
+- Every request sends the `X-CSRFToken` header from the `csrftoken` cookie (see `api()` in `app.js`). Django rejects changes without it.
+- The frontend only hides buttons a user may not use. The real permission checks happen in Django, and the backend tests in `planner/tests.py` and `accounts/tests.py` verify them.
+
+## Tests
+
+- Backend: `docker compose exec web python manage.py test` runs the Django tests for accounts, permissions, and rate limits against a temporary database.
+- Frontend: `node --test skill-export.test.cjs` checks the skill ZIP builder. Without Node installed, run it in Docker: `docker run --rm -v "${PWD}:/app:ro" -w /app node:22-alpine node --test skill-export.test.cjs`.
+- `frontend.test.cjs` is out of date: it tests the earlier browser-only demo (sample data, `STUDY-DEMO` code) and all its tests fail against the current API-based app. It needs rewriting before it is useful again.
+
+## Material 3 Expressive
+
+`assets/material3.css` is loaded last and restyles the light and dark themes after Material 3 Expressive: tonal color roles (`--m3-*` tokens mapped onto the older `--bg`/`--accent`/`--panel` variables), large 28px surface shapes, pill buttons that morph into rounded squares on press, tonal/filled/extended-FAB button variants, connected button groups for tabs, M3 switch, checkbox, chips, search bar, fields, select menus, dialogs, snackbar, and a floating toolbar for mobile navigation. Blur (acrylic) surfaces, the liquid motion layer, layout, and markup are unchanged; the Counter-Strike theme is untouched. Roboto Flex is loaded from Google Fonts and falls back to Roboto / Segoe UI offline.
+
+## Features
+
+- Responsive overview, tasks, notes library, subjects, and calendar.
+- Light and dark Material 3 Expressive themes with blurred surfaces, plus a Counter-Strike 1.6 VGUI-inspired theme, selected from the bottom of the sidebar.
+- Sign-in and registration screens at `#login` and `#register`, backed by Django sessions. Visitors who are not signed in are redirected to sign-in, including direct workspace URLs. Logout is next to the username on desktop and under More on mobile.
+- Overview with recently opened files first; upcoming deadlines in a chronological popup and a subject-count shortcut in the header.
+- PERSONAL / SHARED collections. Subject cards and settings display the owner's name.
+- Owners create and rename subjects, open or close invitations, reset invitation codes, and remove individual members. Closing invitations or resetting a code keeps existing members.
+- Others join an open subject with its 8-character invitation code. Members get read-only access to the subject's files and can leave at any time. When a member leaves or is removed, their own tasks stay, just unfiled.
+- Deleting a subject keeps its files in the notes library as unfiled. The owner's tasks for it are deleted; members' tasks stay, unfiled.
+- Explorer-style file lists within each subject and the notes library, with name, modified date, type, and size columns. Lists show 30 files at a time with a Load more button.
 - Create, edit, complete, and delete tasks; filter by completion.
-- Create, edit, search, delete, import, and download Markdown or text files. Multiple `.md` and `.txt` files can be imported into a chosen subject at once, up to 1 MB each.
-- Monthly calendar for deadlines, exams, and study sessions. Click a date to add an event or an existing event to edit it.
-- Focus timer with an editable 1–180 minute duration. The synchronized clock sits below the header buttons on other pages; applying a duration pauses and resets it.
-- Six saved event colors, red overdue task highlights, and orange highlights for tomorrow. Completed tasks do not glow.
-- Font size settings (100–150%) saved in browser storage across themes.
-- Acrylic popup entry/exit animations; CS and reduced-motion preferences disable animations.
-- Mobile floating bottom navigation with appearance/import controls under More. The calendar uses colored markers and a readable monthly agenda on small screens.
-- Footer stays at the viewport bottom on short pages and follows content on longer pages.
-- Two-second timer startup pulse; on expiry a non-blocking announcement expands from the clock, stays for three seconds, bursts into particles and shrinks back. CS and reduced-motion settings use a simple three-second announcement.
-- Matching sign-in/register screens at `#login` and `#register`; logout is next to the desktop username and under More on mobile. These are explicitly demo forms: no real authentication, password storage, or credential requests. A demo username is saved locally, and logout preserves workspace notes/tasks.
-- New visitors are redirected to sign-in, including direct workspace URLs. Valid demo sessions are remembered across tabs and browser restarts using localStorage. Logout clears that session and redirects other open tabs to sign-in. Clearing browser data also requires signing in again. If storage is unavailable, login lasts only in the current tab. This is frontend navigation behavior, not server-enforced security; Django sessions will replace it.
-- New subject is shown only on Overview, Notes library, and Subjects. Mobile navigation uses a translucent blurred acrylic background (CS stays opaque).
-- Browser-local task, note, and theme persistence. The initial workspace includes sample data; clearing browser storage resets it. Storage is per browser and origin, with no account or synchronization. The timer resets on reload.
+- Create, edit, search, delete, import, and download Markdown or text files. Multiple `.md` and `.txt` files can be imported into a chosen subject at once.
+- Export a subject as an AI skill: a ZIP with `SKILL.md` and all its notes as references.
+- Monthly calendar for deadlines, exams, and study sessions. Click a date to add an event, or an existing event to edit it.
+- Focus timer with an editable 1–180 minute duration. A synchronized mini clock sits below the header on other pages and can be dragged to a trash zone to hide it.
+- Six event colors, red highlights for overdue tasks, and orange for tomorrow. Completed tasks do not glow.
+- Font size settings (100–150%) and English / Romanian interface language.
+- Mobile floating bottom navigation with appearance and import controls under More. The calendar uses colored markers and a monthly agenda on small screens.
+- Counter-Strike and reduced-motion settings disable animations.
 
 ## Liquid glass motion
 
-`assets/liquid.css` and `assets/liquid.js` add a motion layer on top of the acrylic themes. Remove their two tags from `index.html` to switch it off; nothing else depends on them.
+`assets/liquid.css` and `assets/liquid.js` add a motion layer on top of the light and dark themes. Remove their two tags from `index.html` to switch it off; nothing else depends on them.
 
-- Spring easing (`--spring`, `--spring-soft`) for presses, hovers, dialogs, popups, the toast, and view changes, which arrive as a staggered cascade.
-- A selection pill that stretches as it flows between sidebar items (and the mobile bottom bar); the subject and sign-in tabs get a sliding underline.
+- Spring easing (`--spring`, `--spring-soft`) for presses, hovers, dialogs, popups, the snackbar, and view changes, which arrive as a staggered cascade.
+- A selection pill that stretches as it flows between sidebar items (and the mobile bottom bar); the subject and sign-in tabs get a sliding pill.
 - Glass surfaces catch a soft highlight under the pointer.
 - Cards can be picked up. Subject cards drag freely and reorder their neighbours, and the new order is saved. Recent-note cards stretch on a rubber band and snap back. Mouse: drag. Touch: press and hold, then drag.
 - Light/dark switching pours out from the switch (browsers with View Transitions), and calendar months slide in from the direction of travel.
-- Counter-Strike and reduced-motion settings keep everything static, as before.
 
-## Later
+## Not built yet
 
-The initial four subjects and their notes are sample data. The sidebar shows the prototype username `Student`; Django authentication/API, PostgreSQL persistence, image/PDF OCR, real public sharing, Celery/Redis reminders, and Docker are not implemented. Invitation and membership changes are local UI demonstrations; Django must implement actual cross-account access and enforce permissions. Notes are edited as source, not rendered HTML.
-
-`index.html` holds the common markup; `assets/styles.css` holds layout and both themes using `data-theme`; `assets/app.js` holds demo state and interactions. The local preview server is only a development convenience, not the planned application backend.
+- OCR: the Image tab in the import dialog shows a preview animation, but no text is extracted yet.
+- Deadline reminders (planned with Celery and Redis).
+- Notes are edited as Markdown source, not rendered.

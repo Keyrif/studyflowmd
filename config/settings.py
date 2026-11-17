@@ -21,16 +21,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 
-# Quick-start development settings - unsuitable for production
+# Secrets and environment-specific switches come from .env (see .env.example),
+# never from code that is committed to Git.
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-jxeb@(v*et!r(wbou9%evg-#a!5u95dwtsay1$6ajj6(04x6k4'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    raise RuntimeError('DJANGO_SECRET_KEY is missing. Copy .env.example to .env and fill it in.')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Off unless .env explicitly turns it on, so a forgotten setting fails safe.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
+
+# Cookies travel only over HTTPS once the app runs in production (DEBUG off).
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+X_FRAME_OPTIONS = 'DENY'
 
 
 # Application definition
@@ -131,6 +144,20 @@ STATIC_URL = 'assets/'
 STATICFILES_DIRS = [BASE_DIR / 'assets']
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+
+
+# Django REST Framework
+# Only session (cookie) logins are accepted. DRF's default also allows HTTP Basic auth,
+# which would let anyone try passwords on any endpoint without going through the
+# rate-limited login view and without CSRF protection.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_THROTTLE_RATES': {
+        'auth': '5/min',   # sign-in and registration attempts per visitor
+        'join': '10/min',  # invitation-code guesses per user
+    },
+}
 
 
 # Email
