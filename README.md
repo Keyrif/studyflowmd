@@ -55,5 +55,6 @@ Prin extragerea notițelor cu **OCR** și salvarea lor în text, **StudyFlowMD**
 ## Creeare SKILL.md
 Transformă o materie într-un fișier SKILL.md pentru AI cu instrucțiuni personalizate, precum explicații pas cu pas sau afișarea formulelor, descarcand toate notițele ca referințe.
 
-<img width="645" height="1101" alt="image" src="https://github.com/user-attachments/assets/9a26739f-7929-4662-b77c-076eb1e5b033" />
+<img width="671" height="1114" alt="image" src="https://github.com/user-attachments/assets/4b975e73-1c07-416e-ac2f-899c584ece1b" />
+
 
