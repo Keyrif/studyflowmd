@@ -38,8 +38,6 @@ Notes are paginated so the app stays fast with thousands of them. `/api/notes/` 
 
 - Backend: `docker compose exec web python manage.py test` runs the Django tests for accounts, permissions, and rate limits against a temporary database.
 - Frontend: `node --test skill-export.test.cjs` checks the skill ZIP builder. Without Node installed, run it in Docker: `docker run --rm -v "${PWD}:/app:ro" -w /app node:22-alpine node --test skill-export.test.cjs`.
-- `frontend.test.cjs` is out of date: it tests the earlier browser-only demo (sample data, `STUDY-DEMO` code) and all its tests fail against the current API-based app. It needs rewriting before it is useful again.
-
 ## Material 3 Expressive
 
 `assets/material3.css` is loaded last and restyles the light and dark themes after Material 3 Expressive: tonal color roles (`--m3-*` tokens mapped onto the older `--bg`/`--accent`/`--panel` variables), large 28px surface shapes, pill buttons that morph into rounded squares on press, tonal/filled/extended-FAB button variants, connected button groups for tabs, M3 switch, checkbox, chips, search bar, fields, select menus, dialogs, snackbar, and a floating toolbar for mobile navigation. Blur (acrylic) surfaces, the liquid motion layer, layout, and markup are unchanged; the Counter-Strike theme is untouched. Roboto Flex is loaded from Google Fonts and falls back to Roboto / Segoe UI offline.
