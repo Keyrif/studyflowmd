@@ -23,7 +23,7 @@ class Subject(models.Model):
         return self.name
 
 class Task(models.Model):
-    KIND_CHOICES = [('assignment','Assignment'), ('exam','Exam'), ('study','Study session')]
+    KIND_CHOICES = [('assignment','Assignment'), ('exam','Exam'), ('midterm','Midterm'), ('study','Study session')]
 
     user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  
     title   = models.CharField(max_length=200)       
@@ -32,6 +32,8 @@ class Task(models.Model):
     kind    = models.CharField(max_length=20, choices=KIND_CHOICES)  
     color   = models.CharField(max_length=7)
     done    = models.BooleanField(default=False)
+    # Followed tasks appear in the small widget at the top of every page, closest deadline first.
+    followed = models.BooleanField(default=False)
     # Day a reminder email went out, so the daily job never sends the same reminder twice.
     reminded_on = models.DateField(null=True, blank=True)
 
@@ -51,6 +53,41 @@ class Note(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Notification(models.Model):
+    """A reminder shown in the notifications panel (and pushed to the browser, if enabled).
+
+    `key` names what the reminder is about, for example "task-12-2026-11-21-3d". The pair
+    (user, key) is unique, so the hourly job can run as often as it likes without ever
+    creating the same reminder twice.
+    """
+
+    user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
+    task    = models.ForeignKey(Task, on_delete=models.SET_NULL, null=True, blank=True)
+    key     = models.CharField(max_length=120)
+    title   = models.CharField(max_length=200)
+    body    = models.CharField(max_length=300, blank=True)
+    read    = models.BooleanField(default=False)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created', '-id']
+        constraints = [models.UniqueConstraint(fields=['user', 'key'], name='one_notification_per_reminder')]
+
+
+class PushSubscription(models.Model):
+    """One browser that agreed to receive push notifications for a user.
+
+    The browser gives us an `endpoint` (an address at Google's, Mozilla's or Apple's push
+    service) and two keys used to encrypt messages so only that browser can read them.
+    """
+
+    user     = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='push_subscriptions')
+    endpoint = models.URLField(max_length=1000, unique=True)
+    p256dh   = models.CharField(max_length=200)
+    auth     = models.CharField(max_length=100)
+    created  = models.DateTimeField(auto_now_add=True)
 
 
 class OcrJob(models.Model):

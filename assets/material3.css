@@ -16,6 +16,11 @@ html:not([data-theme="cs"]) {
   --m3-on-surface:#1e0e2e; --m3-on-surface-variant:#5c4b6c; --m3-outline:#8d7b9c; --m3-outline-variant:#dcc8ea;
   --m3-inverse-surface:#33253f; --m3-inverse-on-surface:#f7ecff; --m3-inverse-primary:#d9b7ff;
   --m3-scrim:rgba(30,14,46,.34);
+  /* Frosted cards: clearly lighter than the lavender background, still slightly see-through. */
+  --m3-card:color-mix(in srgb,var(--m3-surface-container-lowest) 82%,transparent);
+  --m3-card-hover:color-mix(in srgb,var(--m3-surface-container-lowest) 96%,transparent);
+  --m3-card-shadow:0 1px 2px rgba(30,14,46,.06),0 4px 16px -6px rgba(30,14,46,.14);
+  --m3-on-card-subtle:color-mix(in srgb,var(--m3-surface-container-high) 70%,transparent);
   --m3-elevation-1:0 1px 2px rgba(30,14,46,.08),0 2px 10px -4px rgba(30,14,46,.12);
   --m3-elevation-2:0 2px 6px -2px rgba(30,14,46,.12),0 8px 22px -10px rgba(30,14,46,.2);
   --m3-elevation-3:0 6px 14px -6px rgba(30,14,46,.18),0 16px 40px -16px rgba(30,14,46,.28);
@@ -54,6 +59,11 @@ html[data-theme="dark"] {
   --m3-on-surface:#f0e4fa; --m3-on-surface-variant:#cfbedd; --m3-outline:#998aa8; --m3-outline-variant:#4e3f5e;
   --m3-inverse-surface:#f0e4fa; --m3-inverse-on-surface:#33253f; --m3-inverse-primary:#6d2bc3;
   --m3-scrim:rgba(5,0,12,.55);
+  /* Dark frosted cards: a clearly raised tone above the near-black background. */
+  --m3-card:color-mix(in srgb,var(--m3-surface-container-high) 80%,transparent);
+  --m3-card-hover:color-mix(in srgb,var(--m3-surface-container-highest) 88%,transparent);
+  --m3-card-shadow:0 1px 2px rgba(0,0,0,.35),0 6px 18px -8px rgba(0,0,0,.5);
+  --m3-on-card-subtle:color-mix(in srgb,var(--m3-surface-container-highest) 80%,transparent);
   --m3-elevation-1:0 1px 2px rgba(0,0,0,.3),0 2px 10px -4px rgba(0,0,0,.35);
   --m3-elevation-2:0 2px 6px -2px rgba(0,0,0,.35),0 8px 22px -10px rgba(0,0,0,.5);
   --m3-elevation-3:0 6px 14px -6px rgba(0,0,0,.4),0 16px 40px -16px rgba(0,0,0,.6);
@@ -168,6 +178,32 @@ html:not([data-theme="cs"]) .note-card h3 { font-size:calc(13px * var(--font-sca
 html:not([data-theme="cs"]) .subject-card .note-icon { background:color-mix(in srgb,currentColor 16%,transparent); }
 html:not([data-theme="cs"]) .subject-card .icon-button { color:var(--m3-on-surface-variant); }
 html:not([data-theme="cs"]) .subject-card p { font-size:calc(12px * var(--font-scale,1)); }
+
+/* Note and subject cards: M3 filled cards that stay frosted. The blur and the jelly motion
+   (drag, rubber band, reorder, snap-away) are unchanged; what goes is the "metallic" part:
+   the outline, the bright/dark inner edges and the light sheen that followed the pointer. */
+html:not([data-theme="cs"]) :is(.note-card,.subject-card,.task-panel) {
+  border:0; border-radius:28px;
+  background-color:var(--m3-card);
+  background-image:none;
+  -webkit-backdrop-filter:blur(28px) saturate(150%); backdrop-filter:blur(28px) saturate(150%);
+  box-shadow:var(--m3-card-shadow);
+}
+html:not([data-theme="cs"]) :is(.note-card,.subject-card):hover {
+  background-color:var(--m3-card-hover);
+  box-shadow:var(--m3-elevation-2);
+}
+html:not([data-theme="cs"]) .note-card:focus-visible { outline:2px solid var(--m3-primary); outline-offset:3px; }
+/* Picked up: a soft lift shadow only, no glass edges. */
+html:not([data-theme="cs"]) :is(.note-card,.subject-card).liquid-dragging {
+  background-color:color-mix(in srgb,var(--m3-surface-container-highest) 80%,transparent);
+  box-shadow:var(--m3-elevation-3) !important;
+}
+html:not([data-theme="cs"]) .note-card .note-icon { border-radius:16px; padding:10px; }
+html:not([data-theme="cs"]) .note-card .file-type { background:var(--m3-on-card-subtle); color:var(--m3-on-surface-variant); border-radius:999px; padding:4px 10px; }
+html:not([data-theme="cs"]) .note-card p { color:var(--m3-on-surface-variant); }
+html:not([data-theme="cs"]) .note-bottom { color:var(--m3-on-surface-variant); font-weight:500; }
+html:not([data-theme="cs"]) .subject-card .note-icon { border-radius:16px; padding:10px; }
 html:not([data-theme="cs"]) .subject-title:hover h2 { color:var(--m3-primary); }
 html:not([data-theme="cs"]) .empty { font-weight:500; }
 html:not([data-theme="cs"]) footer { color:var(--m3-on-surface-variant); font-weight:500; border-top-color:color-mix(in srgb,var(--m3-outline-variant) 40%,transparent); }
@@ -198,10 +234,17 @@ html.liquid-ready:not([data-theme="cs"]) .subjects-toolbar .tabs button.active,h
 html:not([data-theme="cs"]) .liquid-indicator.liquid-line { top:4px!important; height:calc(100% - 8px)!important; border-radius:999px; background:var(--m3-primary); }
 
 /* ---------- Lists, chips, checkboxes ---------- */
-html:not([data-theme="cs"]) .task-row { border-radius:20px; border-bottom:0; }
-html:not([data-theme="cs"]) .task-row:not(.task-overdue):not(.task-tomorrow) { border:1px solid transparent; }
-html:not([data-theme="cs"]) .task-row:not(.task-overdue):not(.task-tomorrow):hover { background:color-mix(in srgb,var(--m3-surface-container-high) 70%,transparent); }
-html:not([data-theme="cs"]) .task-overdue,html:not([data-theme="cs"]) .task-tomorrow { box-shadow:inset 4px 0 rgba(var(--urgency),.75); }
+html:not([data-theme="cs"]) .task-row { border-radius:20px; border:0; transition:background-color .2s ease; }
+html:not([data-theme="cs"]) .task-row:not(.task-overdue):not(.task-tomorrow):hover { background:var(--m3-on-card-subtle); }
+/* Urgent rows: a flat tint of their color plus a solid accent bar, no gradient, border or glow. */
+html:not([data-theme="cs"]) :is(.task-overdue,.task-tomorrow) {
+  background:rgba(var(--urgency),.13); border:0;
+  box-shadow:inset 4px 0 rgba(var(--urgency),.9);
+}
+html:not([data-theme="cs"]) :is(.task-overdue,.task-tomorrow):hover { background:rgba(var(--urgency),.2); }
+html[data-theme="dark"] :is(.task-overdue,.task-tomorrow) { background:rgba(var(--urgency),.16); }
+html:not([data-theme="cs"]) .task-meta { color:var(--m3-on-surface-variant); font-weight:500; }
+html:not([data-theme="cs"]) .task-row.done .task-name { color:var(--m3-on-surface-variant); }
 html:not([data-theme="cs"]) .task-name { font-weight:500; font-size:calc(13px * var(--font-scale,1)); }
 html:not([data-theme="cs"]) .task-check { width:18px; height:18px; border:2px solid var(--m3-on-surface-variant); border-radius:5px; }
 html:not([data-theme="cs"]) .task-check:hover { box-shadow:0 0 0 8px color-mix(in srgb,var(--m3-on-surface) 8%,transparent); }
@@ -282,6 +325,43 @@ html:not([data-theme="cs"]) #mini-duration:hover { background:color-mix(in srgb,
 html:not([data-theme="cs"]) #mini-duration svg { color:var(--m3-primary); }
 html:not([data-theme="cs"]) #mini-toggle { background:var(--m3-primary); color:var(--m3-on-primary); }
 html:not([data-theme="cs"]) #mini-toggle:hover { background:color-mix(in srgb,var(--m3-primary) 90%,var(--m3-on-primary)); }
+
+/* Mini timer, followed-tasks widget and notifications panel: flat M3 floating toolbars.
+   No glass sheen, inner highlights or blur; a solid tonal surface with a soft shadow,
+   like the sign-in fields and buttons. */
+html:not([data-theme="cs"]) :is(.mini-focus,.follow-list,.notification-popup) {
+  background:var(--m3-surface-container-high); background-image:none;
+  -webkit-backdrop-filter:none; backdrop-filter:none;
+  box-shadow:var(--m3-elevation-2); border:0;
+}
+html:not([data-theme="cs"]) .mini-focus { border-radius:28px; padding:6px; gap:6px; min-height:52px; }
+html:not([data-theme="cs"]) #mini-duration {
+  background:var(--m3-surface-container-highest); color:var(--m3-on-surface);
+  border-radius:999px; padding:8px 14px 8px 10px; gap:8px;
+}
+html:not([data-theme="cs"]) #mini-duration:hover { background:color-mix(in srgb,var(--m3-surface-container-highest) 88%,var(--m3-on-surface)); }
+html:not([data-theme="cs"]) #mini-time { font-weight:600; letter-spacing:.01em; }
+html:not([data-theme="cs"]) #mini-toggle,html:not([data-theme="cs"]) #mini-reset { width:40px; height:40px; border-radius:999px; }
+html:not([data-theme="cs"]) #mini-reset { background:var(--m3-secondary-container); color:var(--m3-on-secondary-container); }
+html:not([data-theme="cs"]) #mini-reset:hover { background:color-mix(in srgb,var(--m3-secondary-container) 85%,var(--m3-on-secondary-container)); }
+
+html:not([data-theme="cs"]) .follow-widget { padding:6px; }
+html:not([data-theme="cs"]) .follow-next { padding:0 10px 0 0; gap:12px; border-radius:22px; }
+html:not([data-theme="cs"]) .follow-next:hover { background:color-mix(in srgb,var(--m3-on-surface) 6%,transparent); }
+html:not([data-theme="cs"]) .follow-star {
+  width:40px; height:40px; border-radius:999px; display:grid; place-items:center;
+  background:color-mix(in srgb,var(--event-color,var(--m3-primary)) 26%,var(--m3-surface-container-high));
+  color:var(--event-color,var(--m3-primary));
+}
+html:not([data-theme="cs"]) .follow-text strong { color:var(--m3-on-surface); font-size:calc(13px * var(--font-scale,1)); }
+html:not([data-theme="cs"]) .follow-text small { color:var(--m3-on-surface-variant); font-weight:500; }
+html:not([data-theme="cs"]) .follow-soon .follow-text small { color:var(--m3-tertiary); }
+html:not([data-theme="cs"]) .follow-overdue .follow-text small { color:var(--m3-error); }
+html:not([data-theme="cs"]) .follow-more { background:var(--m3-primary); color:var(--m3-on-primary); padding:3px 9px; }
+html:not([data-theme="cs"]) .follow-list { border-radius:28px; padding:8px; }
+html:not([data-theme="cs"]) .follow-open { border-radius:20px; }
+html:not([data-theme="cs"]) .follow-open:hover { background:color-mix(in srgb,var(--m3-on-surface) 8%,transparent); }
+html:not([data-theme="cs"]) .follow-list-heading { color:var(--m3-on-surface-variant); }
 html:not([data-theme="cs"]) .timer-expiry { border-radius:28px; border:0; }
 html:not([data-theme="cs"]) .timer-expiry strong { font-weight:600; }
 html:not([data-theme="cs"]) .clock-energy-ring { border-color:var(--m3-primary); box-shadow:0 0 18px color-mix(in srgb,var(--m3-primary) 35%,transparent); }

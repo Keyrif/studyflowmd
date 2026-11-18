@@ -201,8 +201,16 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1    # take one job at a time: long OCR jobs
 CELERY_TIMEZONE = 'Europe/Bucharest'
 CELERY_BEAT_SCHEDULE = {
     'deadline-reminders': {'task': 'planner.tasks.send_deadline_reminders', 'schedule': crontab(hour=8, minute=0)},
+    'deadline-notifications': {'task': 'planner.tasks.create_deadline_notifications', 'schedule': crontab(minute=0)},
     'clean-up-ocr-jobs': {'task': 'planner.tasks.clean_up_ocr_jobs', 'schedule': crontab(minute=30)},
 }
+
+
+# Browser push notifications (Web Push). Without these keys the app still works; the
+# notifications panel just won't offer to turn on browser notifications.
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
+VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:admin@studyflow.local')
 
 
 # Django REST Framework

@@ -157,6 +157,7 @@ const I18N_RO = {
   Type: 'Tip',
   Assignment: 'Temă',
   Exam: 'Examen',
+  Midterm: 'Parțial',
   'Study session': 'Sesiune de studiu',
   'Event color': 'Culoarea evenimentului',
   'Save task': 'Salvează sarcina',
@@ -287,6 +288,29 @@ const I18N_RO = {
   'Drop the timer here to hide it': 'Lasă cronometrul aici ca să-l ascunzi',
   'Start it again from Overview to bring it back': 'Pornește-l din nou din Prezentare generală ca să revină',
   'Timer hidden. Start it from Overview to bring it back.': 'Cronometru ascuns. Pornește-l din Prezentare generală ca să revină.',
+  Follow: 'Urmărește',
+  Unfollow: 'Nu mai urmări',
+  'Following this task.': 'Urmărești această sarcină.',
+  'No longer following this task.': 'Nu mai urmărești această sarcină.',
+  'Followed tasks': 'Sarcini urmărite',
+  'Drop here to hide followed tasks': 'Lasă aici ca să ascunzi sarcinile urmărite',
+  'Follow a task again to bring it back': 'Urmărește din nou o sarcină ca să revină',
+  'Followed tasks hidden. Follow a task again to bring them back.':
+    'Sarcini urmărite ascunse. Urmărește din nou o sarcină ca să revină.',
+  Notifications: 'Notificări',
+  'Close notifications': 'Închide notificările',
+  'Delete notification': 'Șterge notificarea',
+  Delete: 'Șterge',
+  'No notifications yet. Reminders for upcoming deadlines will show up here.':
+    'Nicio notificare încă. Aici vor apărea remindere pentru termenele care se apropie.',
+  'Get reminders even when this tab is closed.': 'Primește remindere chiar și cu tab-ul închis.',
+  'Browser notifications are on.': 'Notificările în browser sunt pornite.',
+  'Browser notifications are off.': 'Notificările în browser sunt oprite.',
+  'Browser notifications are blocked in your browser settings.':
+    'Notificările sunt blocate din setările browserului.',
+  'Turn on': 'Pornește',
+  'Turn off': 'Oprește',
+  'just now': 'acum',
 };
 
 const I18N_EN = {

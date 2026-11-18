@@ -2,7 +2,7 @@ import re
 
 from rest_framework import serializers
 
-from .models import Note, Subject, Task
+from .models import Note, Notification, Subject, Task
 
 # Colors end up inside HTML style attributes in the browser, so only accept values
 # that cannot contain anything but a color.
@@ -13,7 +13,7 @@ EVENT_COLOR_NAMES = {'sage', 'blue', 'violet', 'rose', 'orange', 'red'}
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'subject', 'date', 'kind', 'color', 'done', 'user']
+        fields = ['id', 'title', 'subject', 'date', 'kind', 'color', 'done', 'followed', 'user']
         read_only_fields = ['user']
 
     def validate_color(self, color):
@@ -28,6 +28,13 @@ class TaskSerializer(serializers.ModelSerializer):
         if subject.owner_id != user.id and not subject.members.filter(pk=user.pk).exists():
             raise serializers.ValidationError('You do not have access to this subject.')
         return subject
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'body', 'task', 'read', 'created']
+        read_only_fields = fields
 
 
 class NoteSerializer(serializers.ModelSerializer):

@@ -20,8 +20,12 @@ from django.utils import timezone
 from PIL import Image, ImageDraw, ImageFont
 from rest_framework.test import APITestCase
 
-from .models import Note, OcrJob, OcrPhoto, Subject, Task
-from .tasks import OCR_WINDOW, advance_upload, clean_up_ocr_jobs, read_photo, send_deadline_reminders
+from django.test import override_settings
+
+from .models import Note, Notification, OcrJob, OcrPhoto, PushSubscription, Subject, Task
+from .push import send_to_user
+from .tasks import (OCR_WINDOW, advance_upload, clean_up_ocr_jobs, create_deadline_notifications, read_photo,
+                    send_deadline_reminders)
 
 User = get_user_model()
 
@@ -80,6 +84,28 @@ class TaskTests(PlannerTestCase):
             'user': self.outsider.id}, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Task.objects.get(pk=response.data['id']).user, self.owner)
+
+    def test_midterm_is_a_task_type(self):
+        self.as_user(self.owner)
+        response = self.client.post('/api/tasks/', {
+            'title': 'Algebra midterm', 'date': '2026-12-01', 'kind': 'midterm', 'color': 'orange'}, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Task.objects.get(pk=response.data['id']).get_kind_display(), 'Midterm')
+
+    def test_follow_and_unfollow_a_task(self):
+        task = self.task(self.owner)
+        self.as_user(self.owner)
+        self.assertFalse(self.client.get(f'/api/tasks/{task.id}/').data['followed'])  # off by default
+        self.client.patch(f'/api/tasks/{task.id}/', {'followed': True}, format='json')
+        self.assertTrue(Task.objects.get(pk=task.pk).followed)
+        self.client.patch(f'/api/tasks/{task.id}/', {'followed': False}, format='json')
+        self.assertFalse(Task.objects.get(pk=task.pk).followed)
+
+    def test_cannot_follow_someone_elses_task(self):
+        other = self.task(self.outsider)
+        self.as_user(self.owner)
+        self.assertEqual(self.client.patch(f'/api/tasks/{other.id}/', {'followed': True}, format='json').status_code, 404)
+        self.assertFalse(Task.objects.get(pk=other.pk).followed)
 
     def test_task_color_must_be_a_real_color(self):
         self.as_user(self.owner)
@@ -463,6 +489,114 @@ class ReminderTests(PlannerTestCase):
     def test_students_without_an_email_are_skipped(self):
         User.objects.filter(pk=self.member.pk).update(email='')
         self.assertEqual(send_deadline_reminders(), 1)
+
+
+class DeadlineNotificationTests(PlannerTestCase):
+    """The hourly job that fills the notifications panel and pushes reminders to browsers."""
+
+    def setUp(self):
+        super().setUp()
+        self.today = datetime.now(ZoneInfo('Europe/Bucharest')).date()
+        day = lambda n: self.today + timedelta(days=n)
+        self.midterm = Task.objects.create(user=self.owner, subject=self.subject, title='Algebra midterm', date=day(3),
+                                           kind='midterm', color='orange')
+        Task.objects.create(user=self.owner, title='Essay draft', date=day(3), kind='assignment', color='blue')
+        Task.objects.create(user=self.owner, title='Problem set', date=day(1), kind='assignment', color='blue')
+        Task.objects.create(user=self.owner, title='Finished', date=day(1), kind='exam', color='sage', done=True)
+        Task.objects.create(user=self.member, title='Member exam', date=day(1), kind='exam', color='sage')
+        patcher = mock.patch('planner.tasks.push_notification.delay')
+        self.pushed = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_job(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            return create_deadline_notifications()
+
+    def test_exams_and_midterms_get_an_early_reminder_and_everything_gets_a_day_before(self):
+        self.assertEqual(self.run_job(), 3)
+        titles = sorted(Notification.objects.filter(user=self.owner).values_list('title', flat=True))
+        self.assertEqual(titles, ['Due tomorrow: Problem set', 'Midterm in 3 days: Algebra midterm'])
+        midterm = Notification.objects.get(task=self.midterm)
+        self.assertEqual(midterm.body, f'Midterm · Math · {self.midterm.date:%d %b}')
+        self.assertEqual(Notification.objects.get(user=self.member).title, 'Exam tomorrow: Member exam')
+
+    def test_running_every_hour_never_repeats_a_reminder(self):
+        self.run_job()
+        self.assertEqual(self.run_job(), 0)
+        self.assertEqual(Notification.objects.count(), 3)
+        self.assertEqual(self.pushed.call_count, 3)  # one push per new reminder, never again
+
+    def test_moving_a_deadline_gives_a_fresh_reminder(self):
+        self.run_job()
+        self.midterm.date = self.today + timedelta(days=1)
+        self.midterm.save()
+        self.run_job()
+        self.assertEqual(Notification.objects.filter(task=self.midterm).count(), 2)
+
+
+class NotificationApiTests(PlannerTestCase):
+    def setUp(self):
+        super().setUp()
+        self.mine = Notification.objects.create(user=self.owner, key='a', title='Mine')
+        Notification.objects.create(user=self.owner, key='b', title='Also mine', read=True)
+        self.theirs = Notification.objects.create(user=self.outsider, key='a', title='Theirs')
+        self.as_user(self.owner)
+
+    def test_list_shows_only_your_notifications_and_the_unread_count(self):
+        data = self.client.get('/api/notifications/').data
+        self.assertEqual(sorted(n['title'] for n in data['results']), ['Also mine', 'Mine'])
+        self.assertEqual(data['unread'], 1)
+
+    def test_delete_your_own_but_not_someone_elses(self):
+        self.assertEqual(self.client.delete(f'/api/notifications/{self.mine.id}/').status_code, 204)
+        self.assertEqual(self.client.delete(f'/api/notifications/{self.theirs.id}/').status_code, 404)
+        self.assertTrue(Notification.objects.filter(pk=self.theirs.pk).exists())
+
+    def test_opening_the_panel_marks_everything_read(self):
+        self.client.post('/api/notifications/read-all/')
+        self.assertEqual(self.client.get('/api/notifications/').data['unread'], 0)
+        self.assertFalse(Notification.objects.get(pk=self.theirs.pk).read)  # other users untouched
+
+
+class PushTests(PlannerTestCase):
+    subscription = {'endpoint': 'https://push.example.com/abc', 'keys': {'p256dh': 'key', 'auth': 'secret'}}
+
+    def setUp(self):
+        super().setUp()
+        self.as_user(self.owner)
+
+    @override_settings(VAPID_PUBLIC_KEY='', VAPID_PRIVATE_KEY='')
+    def test_push_is_off_when_the_server_has_no_keys(self):
+        self.assertIsNone(self.client.get('/api/push/').data['public_key'])
+
+    @override_settings(VAPID_PUBLIC_KEY='public', VAPID_PRIVATE_KEY='private')
+    def test_subscribe_and_unsubscribe_a_browser(self):
+        self.assertEqual(self.client.get('/api/push/').data['public_key'], 'public')
+        self.assertEqual(self.client.post('/api/push/', self.subscription, format='json').status_code, 201)
+        self.assertEqual(self.owner.push_subscriptions.count(), 1)
+        self.client.delete('/api/push/unsubscribe/', {'endpoint': self.subscription['endpoint']}, format='json')
+        self.assertEqual(self.owner.push_subscriptions.count(), 0)
+
+    def test_only_https_push_addresses_are_accepted(self):
+        bad = {**self.subscription, 'endpoint': 'http://127.0.0.1:6379/'}
+        self.assertEqual(self.client.post('/api/push/', bad, format='json').status_code, 400)
+
+    @override_settings(VAPID_PUBLIC_KEY='public', VAPID_PRIVATE_KEY='private')
+    def test_reminders_are_pushed_and_dead_browsers_are_forgotten(self):
+        from pywebpush import WebPushException
+        alive = PushSubscription.objects.create(user=self.owner, endpoint='https://push.example.com/1', p256dh='k', auth='a')
+        gone = PushSubscription.objects.create(user=self.owner, endpoint='https://push.example.com/2', p256dh='k', auth='a')
+
+        def fake_webpush(subscription_info, **kwargs):
+            if subscription_info['endpoint'] == gone.endpoint:
+                raise WebPushException('Gone', response=mock.Mock(status_code=410))
+
+        with mock.patch('planner.push.webpush', side_effect=fake_webpush) as webpush:
+            delivered = send_to_user(self.owner, {'title': 'Exam tomorrow'})
+        self.assertEqual(delivered, 1)
+        self.assertEqual(webpush.call_count, 2)
+        self.assertTrue(PushSubscription.objects.filter(pk=alive.pk).exists())
+        self.assertFalse(PushSubscription.objects.filter(pk=gone.pk).exists())  # unsubscribed browser removed
 
 
 class OcrCleanupTests(PlannerTestCase):

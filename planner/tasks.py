@@ -22,8 +22,9 @@ from django.db import transaction
 from django.utils import timezone
 from pytesseract import TesseractNotFoundError
 
-from .models import Note, OcrJob, OcrPhoto, Task
+from .models import Note, Notification, OcrJob, OcrPhoto, Task
 from .ocr import OcrError, image_to_text
+from .push import send_to_user
 
 log = logging.getLogger(__name__)
 NO_TEXT = '_No text was found in this photo._'
@@ -115,6 +116,58 @@ def read_photo(photo_id):
         # Whatever happened to this photo, let the upload's next photo join the queue.
         if job_id:
             advance_upload(job_id)
+
+
+# Reminders, by how many days before the deadline they go out. Exams and midterms get an
+# early one too, so there is still time to study.
+REMINDER_DAYS = {'exam': (3, 1), 'midterm': (3, 1), 'assignment': (1,), 'study': (1,)}
+
+
+def _reminder_text(task, days):
+    kind = task.get_kind_display()
+    when = 'tomorrow' if days == 1 else f'in {days} days'
+    title = f'{kind} {when}: {task.title}' if task.kind in ('exam', 'midterm') else f'Due {when}: {task.title}'
+    body = ' · '.join(part for part in (kind, task.subject.name if task.subject else '', task.date.strftime('%d %b')) if part)
+    return title[:200], body[:300]
+
+
+@shared_task
+def create_deadline_notifications():
+    """Every hour: create a notification for each reminder that is due and not sent yet.
+
+    Running hourly (not once a day) means a task added at 14:00 and due tomorrow still gets
+    its reminder the same afternoon. The unique (user, key) rule makes repeats impossible.
+    """
+    today = datetime.now(ZoneInfo(settings.CELERY_TIMEZONE)).date()
+    created = 0
+    for days in {d for lead_times in REMINDER_DAYS.values() for d in lead_times}:
+        kinds = [kind for kind, lead_times in REMINDER_DAYS.items() if days in lead_times]
+        due = Task.objects.filter(done=False, date=today + timedelta(days=days), kind__in=kinds).select_related('subject')
+        for task in due:
+            title, body = _reminder_text(task, days)
+            notification, new = Notification.objects.get_or_create(
+                user_id=task.user_id, key=f'task-{task.pk}-{task.date.isoformat()}-{days}d',
+                defaults={'task': task, 'title': title, 'body': body},
+            )
+            if new:
+                created += 1
+                # Each push is its own small job, so one slow push service can't hold up the rest.
+                transaction.on_commit(lambda pk=notification.pk: push_notification.delay(pk))
+    return created
+
+
+@shared_task
+def push_notification(notification_id):
+    """Send one notification to every browser its owner enabled push in."""
+    notification = Notification.objects.select_related('user').filter(pk=notification_id).first()
+    if notification is None:
+        return 0
+    return send_to_user(notification.user, {
+        'title': notification.title,
+        'body': notification.body,
+        'tag': notification.key,  # the same reminder never stacks up twice on screen
+        'url': '/#tasks',
+    })
 
 
 @shared_task

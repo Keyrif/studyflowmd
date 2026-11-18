@@ -17,7 +17,7 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 - **Notificări în Fundal**: Remindere automate pentru termenele limită, examenele și parțialele care se apropie, gestionate prin Celery & Redis.
 - **Gestionarea Utilizatorilor**: Înregistrare, autentificare și spații personale pentru gestionarea materiilor, task-urilor și notițelor.
 - **Conversia Notițelor**: Încărcarea fotografiilor cu notițe scrise de mână, extragerea textului prin OCR și verificarea, editarea sau descărcarea acestuia în text în format Markdown.
-- **Partajarea Notițelor**: Generarea unui link prin care studenții pot oferi colegilor acces la notițele lor, cu posibilitatea de a revoca accesul ulterior.
+- **Partajarea Notițelor**: Generarea unui cod de invitație prin care studenții pot oferi colegilor acces la notițele unei materii, cu posibilitatea de a revoca accesul ulterior.
 
 ## Optimizarea consumului de tokenuri AI
 Telefoanele moderne fac fotografii foarte detaliate, la rezoluții de 4K sau mai mari. Dar o fotografie cu o rezolutie mai mare nu înseamnă mai multă informație utilă pentru AI.

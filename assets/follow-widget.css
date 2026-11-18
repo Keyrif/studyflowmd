@@ -1,0 +1,80 @@
+/* Followed-tasks widget: sits under the mini timer (or in its place when the timer is hidden),
+   uses the same floating-pill look, and opens a dropdown of every followed task. */
+
+.follow-widget { top: 76px; padding: 0; }
+/* Timer visible too: stack the widget below it and make the header tall enough for both. */
+.topbar:has(#mini-focus:not([hidden])) .follow-widget { top: 134px; }
+.topbar:has(#mini-focus:not([hidden])):has(#follow-widget:not([hidden])) { height: 200px; }
+
+.follow-next {
+  display: flex; align-items: center; gap: 10px;
+  max-width: 320px; padding: 8px 12px 8px 12px;
+  text-align: left; border-radius: inherit; color: var(--text);
+}
+.follow-star { color: var(--event-color, var(--accent)); flex-shrink: 0; }
+.follow-star svg { width: 18px; height: 18px; fill: currentColor; }
+.follow-text { display: flex; flex-direction: column; min-width: 0; }
+.follow-text strong {
+  font-size: calc(12px * var(--font-scale, 1)); font-weight: 600;
+  max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.follow-text small { font-size: calc(10px * var(--font-scale, 1)); color: var(--muted); margin-top: 2px; }
+.follow-soon .follow-text small { color: #c47a1c; }
+.follow-overdue .follow-text small { color: #c9443d; }
+[data-theme="dark"] .follow-soon .follow-text small { color: #ffd09a; }
+[data-theme="dark"] .follow-overdue .follow-text small { color: #ffb3b8; }
+.follow-more {
+  margin-left: 4px; padding: 2px 8px; border-radius: 999px;
+  background: var(--line); font-size: calc(10px * var(--font-scale, 1)); font-weight: 600;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.follow-more:empty { display: none; }
+
+/* The dropdown. It sits inside the widget, so the drag-to-trash code ignores it. */
+.follow-list {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  width: min(360px, calc(100vw - 32px)); max-height: 60vh; overflow: auto;
+  padding: 8px; cursor: auto; touch-action: auto;
+  background-color: var(--popup, var(--panel));
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, .35);
+}
+.follow-list-heading {
+  padding: 6px 10px 8px; font-size: calc(10px * var(--font-scale, 1));
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.follow-item { display: flex; align-items: center; gap: 2px; border-radius: 16px; }
+.follow-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  padding: 10px; text-align: left; border-radius: 14px; color: var(--text);
+}
+.follow-open:hover, .follow-open:focus-visible { background: var(--line); }
+.follow-item-text { flex: 1; min-width: 0; }
+.follow-item-text strong {
+  display: block; font-size: calc(12px * var(--font-scale, 1)); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.follow-item-text small { display: block; font-size: calc(10px * var(--font-scale, 1)); color: var(--muted); margin-top: 3px; }
+.follow-item.task-overdue .due { color: #a52f36; background: #df52561a; }
+.follow-item.task-tomorrow .due { color: #955512; background: #e999381a; }
+[data-theme="dark"] .follow-item.task-overdue .due { color: #ffb3b8; }
+[data-theme="dark"] .follow-item.task-tomorrow .due { color: #ffd09a; }
+
+/* The star on every task row. Filled when followed; only shown on hover otherwise. */
+.task-follow svg { width: 16px; height: 16px; }
+.task-follow.following { color: #e9a55e; }
+.task-follow.following svg { fill: currentColor; }
+.task-row .task-follow:not(.following) { opacity: 0; }
+.task-row:hover .task-follow, .task-row .task-follow:focus-visible { opacity: 1; }
+
+@media (max-width: 1200px) {
+  .task-row .task-follow:not(.following) { opacity: 1; }
+}
+@media (max-width: 760px) {
+  .follow-widget { top: 70px; }
+  .topbar:has(#mini-focus:not([hidden])) .follow-widget { top: 124px; }
+  .topbar:has(#mini-focus:not([hidden])):has(#follow-widget:not([hidden])) { height: 193px; }
+  .follow-text strong { max-width: 150px; }
+}
+
+[data-theme="cs"] .follow-list, [data-theme="cs"] .follow-open, [data-theme="cs"] .follow-more,
+[data-theme="cs"] .follow-item { border-radius: 0; }

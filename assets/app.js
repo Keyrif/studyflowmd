@@ -27,6 +27,8 @@ const icons = {
   scan: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 8h10M7 12h10M7 16h6"/>',
   upload: '<path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/>',
   x: '<path d="m6 6 12 12M6 18 18 6"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2Z"/><path d="M10 21h4"/>',
   globe:
     '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -87,8 +89,10 @@ try {
     .forEach((key) => localStorage.removeItem(key));
 } catch {}
 let storageAvailable = true;
-const KIND_TO_API = { Assignment: 'assignment', Exam: 'exam', 'Study session': 'study' };
-const KIND_FROM_API = { assignment: 'Assignment', exam: 'Exam', study: 'Study session' };
+const KIND_TO_API = { Assignment: 'assignment', Exam: 'exam', Midterm: 'midterm', 'Study session': 'study' };
+const KIND_FROM_API = { assignment: 'Assignment', exam: 'Exam', midterm: 'Midterm', study: 'Study session' };
+// Default event color for each kind of task, when the user hasn't picked one.
+const KIND_COLORS = { Exam: 'violet', Midterm: 'orange', Assignment: 'blue', 'Study session': 'sage' };
 function subjectFromApi(s) {
   return {
     id: String(s.id),
@@ -111,6 +115,7 @@ function taskFromApi(t) {
     kind: KIND_FROM_API[t.kind] || 'Assignment',
     color: t.color,
     done: t.done,
+    followed: Boolean(t.followed),
   };
 }
 function taskToApi(t) {
@@ -122,6 +127,7 @@ function taskToApi(t) {
     kind: KIND_TO_API[t.kind] || 'assignment',
     color: t.color,
     done: t.done,
+    followed: Boolean(t.followed),
   };
 }
 // Lists from the server carry only a preview and a size; the full text (`body`) arrives
@@ -316,7 +322,7 @@ function renderTasks(target, filter, limit = Infinity) {
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${taskUrgency(t)} ${t.done ? 'done' : ''}"><input type="checkbox" class="task-check" data-complete="${escapeHTML(t.id)}" ${t.done ? 'checked' : ''} aria-label="Complete ${escapeHTML(t.title)}"><div class="task-info"><button class="task-name" translate="no" data-edit-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button><div class="task-meta"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span><span translate="no">${escapeHTML(t.subject)}</span><span>·</span>${escapeHTML(t.kind)}</div></div><span class="due ${t.date <= offsetDate(1) && !t.done ? 'soon' : ''}">${t.done ? 'Completed' : escapeHTML(dueLabel(t.date))}</span><button class="icon-button task-delete" data-delete-task="${escapeHTML(t.id)}" aria-label="Delete ${escapeHTML(t.title)}">${icon('trash')}</button></div>`,
+            `<div class="task-row ${taskUrgency(t)} ${t.done ? 'done' : ''}"><input type="checkbox" class="task-check" data-complete="${escapeHTML(t.id)}" ${t.done ? 'checked' : ''} aria-label="Complete ${escapeHTML(t.title)}"><div class="task-info"><button class="task-name" translate="no" data-edit-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button><div class="task-meta"><span class="subject-dot" style="--subject-color:${subjectColor(t.subject)}"></span><span translate="no">${escapeHTML(t.subject)}</span><span>·</span>${escapeHTML(t.kind)}</div></div><span class="due ${t.date <= offsetDate(1) && !t.done ? 'soon' : ''}">${t.done ? 'Completed' : escapeHTML(dueLabel(t.date))}</span><button class="icon-button task-follow ${t.followed ? 'following' : ''}" data-follow-task="${escapeHTML(t.id)}" aria-pressed="${t.followed}" aria-label="${t.followed ? 'Unfollow' : 'Follow'} ${escapeHTML(t.title)}" title="${t.followed ? 'Unfollow' : 'Follow'}">${icon('star')}</button><button class="icon-button task-delete" data-delete-task="${escapeHTML(t.id)}" aria-label="Delete ${escapeHTML(t.title)}">${icon('trash')}</button></div>`,
         )
         .join('')
     : '<div class="empty">All clear here. A little breathing room.</div>';
@@ -367,6 +373,7 @@ function render() {
   renderDeadlines();
   renderCalendar();
   updateSubjectOptions();
+  if (typeof renderFollowWidget === 'function') renderFollowWidget();
 }
 const views = {
   dashboard: ['Overview', 'Room to think. Space to grow.', 'Your studies, a little more in flow.'],
@@ -434,7 +441,7 @@ function openTask(id, date) {
   $('#task-form').reset();
   const task = state.tasks.find((t) => t.id === id);
   renderColorPicker(
-    task?.color || { Exam: 'violet', Assignment: 'blue', 'Study session': 'sage' }[task?.kind],
+    task?.color || KIND_COLORS[task?.kind],
   );
   $('#task-id').value = task?.id || '';
   $('#task-title').value = task?.title || '';
@@ -496,6 +503,7 @@ document.addEventListener('click', (event) => {
         toast(error.message);
       });
   }
+  if (target.dataset.followTask) toggleFollow(target.dataset.followTask);
   if (target.dataset.editNote) openNote(target.dataset.editNote);
   if (target.dataset.loadMore) loadNotes(target.dataset.loadMore);
   if (target.hasAttribute('data-close')) closeDialog(target.closest('dialog'));
@@ -535,6 +543,7 @@ $('#task-form').addEventListener('submit', async (event) => {
     kind: $('#task-kind').value,
     color: selectedEventColor,
     done: existing?.done || false,
+    followed: existing?.followed || false,
   };
   try {
     const saved = existing
@@ -1007,11 +1016,7 @@ let selectedEventColor = 'sage';
 function eventColor(task) {
   return (
     eventPalette[task.color] ||
-    {
-      Exam: eventPalette.violet,
-      Assignment: eventPalette.blue,
-      'Study session': eventPalette.sage,
-    }[task.kind] ||
+    eventPalette[KIND_COLORS[task.kind]] ||
     eventPalette.sage
   );
 }
@@ -1027,6 +1032,23 @@ function renderColorPicker(color) {
 $('#event-colors').addEventListener('change', (event) => {
   if (Object.hasOwn(eventPalette, event.target.value)) selectedEventColor = event.target.value;
 });
+// Follow / unfollow a task. Followed tasks show up in the widget under the timer.
+async function toggleFollow(id) {
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  const followed = !task.followed;
+  try {
+    await api(`/api/tasks/${encodeURIComponent(id)}/`, { method: 'PATCH', body: { followed } });
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
+  task.followed = followed;
+  // Following something again brings back a widget that was thrown in the trash.
+  if (followed && typeof setFollowWidgetDismissed === 'function') setFollowWidgetDismissed(false);
+  render();
+  toast(followed ? 'Following this task.' : 'No longer following this task.');
+}
 function taskUrgency(task) {
   return task.done
     ? ''

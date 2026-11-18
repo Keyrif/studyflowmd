@@ -7,11 +7,14 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from .models import Note, OcrJob, OcrPhoto, Subject, Task, generate_invite_code
+from django.conf import settings
+
+from .models import Note, Notification, OcrJob, OcrPhoto, PushSubscription, Subject, Task, generate_invite_code
 from .ocr import OcrError, check_image, read_upload
 from .pagination import NotePagination
 from .tasks import advance_upload
-from .serializers import NoteListSerializer, NoteSerializer, SubjectSerializer, TaskSerializer
+from .push import push_enabled
+from .serializers import NoteListSerializer, NoteSerializer, NotificationSerializer, SubjectSerializer, TaskSerializer
 
 PREVIEW_LENGTH = 240
 MAX_IMAGES_PER_UPLOAD = 10
@@ -174,6 +177,64 @@ class NoteViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         self._require_author(instance)
         instance.delete()
+
+
+class NotificationViewSet(viewsets.mixins.ListModelMixin, viewsets.mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Your notifications, newest first.
+
+    GET    /api/notifications/            the latest 100 (only your own)
+    DELETE /api/notifications/<id>/       remove one (the x in the panel)
+    POST   /api/notifications/read-all/   mark everything read (when the panel is opened)
+    """
+
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    def list(self, request):
+        notifications = self.get_queryset()
+        return Response({
+            'unread': notifications.filter(read=False).count(),
+            'results': self.get_serializer(notifications[:100], many=True).data,
+        })
+
+    @action(detail=False, methods=['post'], url_path='read-all')
+    def read_all(self, request):
+        self.get_queryset().filter(read=False).update(read=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PushViewSet(viewsets.ViewSet):
+    """Turn browser push notifications on or off for this browser.
+
+    GET    /api/push/              the server's public key (null when push isn't configured)
+    POST   /api/push/              save this browser's subscription
+    DELETE /api/push/unsubscribe/  forget it ({"endpoint": ...})
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        return Response({'public_key': settings.VAPID_PUBLIC_KEY if push_enabled() else None})
+
+    def create(self, request):
+        endpoint = str(request.data.get('endpoint', ''))
+        keys = request.data.get('keys') or {}
+        # Only real push-service addresses over HTTPS; the server will send requests there.
+        if not endpoint.startswith('https://') or len(endpoint) > 1000 or not keys.get('p256dh') or not keys.get('auth'):
+            return Response({'error': 'This browser sent an invalid subscription.'}, status=status.HTTP_400_BAD_REQUEST)
+        PushSubscription.objects.update_or_create(
+            endpoint=endpoint,
+            defaults={'user': request.user, 'p256dh': str(keys['p256dh'])[:200], 'auth': str(keys['auth'])[:100]},
+        )
+        return Response(status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['delete'], url_path='unsubscribe')
+    def unsubscribe(self, request):
+        request.user.push_subscriptions.filter(endpoint=str(request.data.get('endpoint', ''))).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SubjectViewSet(viewsets.ModelViewSet):

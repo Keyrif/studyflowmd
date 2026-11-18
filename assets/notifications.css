@@ -1,0 +1,52 @@
+/* Notifications button (next to Deadlines and Subjects) and its panel. The panel reuses the
+   Deadlines popup's position and animation (.deadline-popup). */
+
+.notification-control { position: relative; }
+#notifications-toggle { position: relative; }
+.notification-badge {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 999px;
+  background: var(--m3-error, #b3261e); color: var(--m3-on-error, #fff);
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+  box-shadow: 0 0 0 2px var(--m3-surface, var(--bg));
+}
+
+/* Both header popups open on top of the floating timer and followed-tasks widget below them. */
+.deadline-popup { z-index: 50; }
+.notification-popup { max-height: min(560px, 75vh); display: flex; flex-direction: column; }
+.notification-popup[hidden] { display: none; }
+#notification-list { overflow: auto; margin: 0 -6px; }
+
+.push-setting {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 0 12px; padding: 10px 10px 10px 14px; border-radius: 18px;
+  background: var(--m3-secondary-container, var(--line)); color: var(--m3-on-secondary-container, var(--text));
+  font-size: calc(11px * var(--font-scale, 1)); font-weight: 500;
+}
+.push-setting[hidden] { display: none; }
+.push-setting .button { padding: 8px 14px; min-height: 34px; flex-shrink: 0; }
+
+.notification-item { display: flex; align-items: flex-start; gap: 2px; border-radius: 18px; }
+.notification-open {
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 8px 12px 10px; text-align: left; border-radius: 16px; color: var(--text);
+}
+.notification-open:not(:disabled):hover { background: var(--line); }
+.notification-open:disabled { cursor: default; opacity: 1; }
+.notification-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; flex-shrink: 0; background: transparent; }
+.notification-item.unread .notification-dot { background: var(--m3-primary, var(--accent)); }
+.notification-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.notification-text strong { font-size: calc(12px * var(--font-scale, 1)); font-weight: 600; overflow-wrap: anywhere; }
+.notification-item:not(.unread) .notification-text strong { font-weight: 500; }
+.notification-text small { font-size: calc(10px * var(--font-scale, 1)); color: var(--muted); }
+.notification-text time { font-size: calc(9px * var(--font-scale, 1)); color: var(--muted); opacity: .8; }
+.notification-delete { flex-shrink: 0; margin-top: 6px; width: 32px; height: 32px; }
+.notification-delete svg { width: 15px; height: 15px; }
+
+@media (max-width: 760px) {
+  .notification-label { display: none; }
+  #notifications-toggle { padding-left: 11px; padding-right: 11px; }
+}
+
+[data-theme="cs"] .notification-badge, [data-theme="cs"] .push-setting,
+[data-theme="cs"] .notification-item, [data-theme="cs"] .notification-open { border-radius: 0; }
