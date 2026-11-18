@@ -30,6 +30,8 @@ Notes are paginated so the app stays fast with thousands of them. `/api/notes/` 
 - Every piece of user text is passed through `escapeHTML()` before it is inserted with `innerHTML`. Keep doing this for any new template.
 - Colors that come from the server go through `safeColor()` before being written into a `style` attribute.
 - Every request sends the `X-CSRFToken` header from the `csrftoken` cookie (see `api()` in `app.js`). Django rejects changes without it.
+- A Content Security Policy (`SECURE_CSP` in `config/settings.py`) only allows scripts from our own `assets/` files. Never add inline `<script>` blocks, `onclick="..."` attributes, or `eval`; they will be blocked. Loading anything from a new outside site (another font or CDN) needs an entry in the policy.
+- Django serves `index.html` through `config/views.py`, which adds a content fingerprint to every `assets/...js` and `.css` link (`app.js?v=3f9a2c81d0`). Browsers therefore always get the current file after an update. Keep asset links as plain `assets/...` paths in `index.html`; the fingerprint is added automatically.
 - The frontend only hides buttons a user may not use. The real permission checks happen in Django, and the backend tests in `planner/tests.py` and `accounts/tests.py` verify them.
 
 ## Tests
@@ -55,6 +57,8 @@ Notes are paginated so the app stays fast with thousands of them. `/api/notes/` 
 - Explorer-style file lists within each subject and the notes library, with name, modified date, type, and size columns. Lists show 30 files at a time with a Load more button.
 - Create, edit, complete, and delete tasks; filter by completion.
 - Create, edit, search, delete, import, and download Markdown or text files. Multiple `.md` and `.txt` files can be imported into a chosen subject at once.
+- Import photos of notes (up to 10 JPG, PNG, or WebP, 10 MB each). The upload only stores the photos and queues a background job, so the dialog closes within moments. A Celery worker cleans each photo up, reads it with Tesseract OCR (Romanian and English), and saves it as a Markdown note; the page asks for progress every 1.5 seconds (`/api/notes/ocr/<job id>/`) and adds each note as soon as it is ready.
+- Daily deadline reminders: every morning at 8:00 (Bucharest time), each student gets one email listing their unfinished tasks due tomorrow.
 - Export a subject as an AI skill: a ZIP with `SKILL.md` and all its notes as references.
 - Monthly calendar for deadlines, exams, and study sessions. Click a date to add an event, or an existing event to edit it.
 - Focus timer with an editable 1–180 minute duration. A synchronized mini clock sits below the header on other pages and can be dragged to a trash zone to hide it.
@@ -75,6 +79,5 @@ Notes are paginated so the app stays fast with thousands of them. `/api/notes/` 
 
 ## Not built yet
 
-- OCR: the Image tab in the import dialog shows a preview animation, but no text is extracted yet.
-- Deadline reminders (planned with Celery and Redis).
 - Notes are edited as Markdown source, not rendered.
+- Reminder emails print in the worker's log (`docker compose logs worker`); a real mail server is not configured yet.

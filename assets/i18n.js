@@ -66,7 +66,7 @@ const I18N_RO = {
   'Keep going': 'Continuă',
   'From paper to possibility.': 'De la hârtie la posibilitate.',
   'Your handwritten notes, ready for Markdown.': 'Notițele tale scrise de mână, gata pentru Markdown.',
-  'Text & Markdown now · OCR coming later': 'Text și Markdown acum · OCR în curând',
+  'Text, Markdown, and photos (OCR)': 'Text, Markdown și fotografii (OCR)',
   'Your task list': 'Lista ta de sarcini',
   'Filter tasks': 'Filtrează sarcinile',
   'All tasks': 'Toate sarcinile',
@@ -140,12 +140,13 @@ const I18N_RO = {
   Text: 'Text',
   Image: 'Imagine',
   'Photos of your notes': 'Fotografii cu notițele tale',
-  'JPG, PNG or WebP photos, up to 10 MB each. Text extraction (OCR) will be connected soon.':
-    'Fotografii JPG, PNG sau WebP, de maximum 10 MB fiecare. Extragerea textului (OCR) va fi conectată în curând.',
+  'Up to 10 JPG, PNG or WebP photos, 10 MB each. Each photo becomes a Markdown note.':
+    'Maximum 10 fotografii JPG, PNG sau WebP, de 10 MB fiecare. Fiecare fotografie devine o notiță Markdown.',
   'Process images': 'Procesează imaginile',
-  'Loading images': 'Se încarcă imaginile',
-  'Splitting your photo into tiles. Text extraction (OCR) will be connected soon.':
-    'Fotografia este împărțită în bucăți (tiles). Extragerea textului (OCR) va fi conectată în curând.',
+  'Uploading your photos': 'Se încarcă fotografiile',
+  'Uploading. The photos are read in the background, so you can keep working.':
+    'Se încarcă. Fotografiile sunt citite în fundal, așa că poți lucra mai departe.',
+  'Choose up to 10 photos at a time.': 'Alege maximum 10 fotografii odată.',
   'Use image files under 10 MB each.': 'Folosește imagini de maximum 10 MB fiecare.',
   'A new small step': 'Un nou pas mic',
   'A little adjustment': 'O mică ajustare',

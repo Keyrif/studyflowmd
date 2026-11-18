@@ -1,6 +1,7 @@
 'use strict';
 
 const OCR_MAX_BYTES = 10 * 1024 * 1024;
+const OCR_MAX_FILES = 10;
 const OCR_COLUMNS = 6;
 const OCR_ROWS = 8;
 let importMode = 'text';
@@ -88,13 +89,18 @@ async function paintTiles(url) {
   stage.replaceChildren(...tiles);
 }
 
+// Returns false (and shows why) if the chosen photos can't be sent.
 function startOcrPreview() {
   const files = [...document.getElementById('import-images').files];
   const error = document.getElementById('import-error');
-  if (!files.length) return;
+  if (!files.length) return false;
+  if (files.length > OCR_MAX_FILES) {
+    error.textContent = 'Choose up to 10 photos at a time.';
+    return false;
+  }
   if (files.some((file) => !file.type.startsWith('image/') || file.size > OCR_MAX_BYTES)) {
     error.textContent = 'Use image files under 10 MB each.';
-    return;
+    return false;
   }
   error.textContent = '';
   ocrUrls = files.map((file) => URL.createObjectURL(file));
@@ -104,6 +110,60 @@ function startOcrPreview() {
   document.getElementById('import-submit').disabled = true;
   document.getElementById('ocr-count').textContent = files.length > 1 ? `1 / ${files.length}` : '';
   paintTiles(ocrUrls[0]);
+  return true;
+}
+
+// Upload the photos. The server only stores them and queues a background job, so it answers
+// within moments; the dialog closes and the user can keep working while a worker reads them.
+async function runOcrImport(subjectId) {
+  if (!startOcrPreview()) return;
+  const form = new FormData();
+  [...document.getElementById('import-images').files].forEach((file) => form.append('images', file));
+  if (subjectId) form.append('subject', subjectId);
+  let job;
+  try {
+    job = await api('/api/notes/ocr/', { method: 'POST', form });
+  } catch (error) {
+    stopOcrPreview();
+    document.getElementById('import-error').textContent = error.message;
+    return;
+  }
+  closeDialog(document.getElementById('import-dialog'));
+  toast(`Reading ${job.total} photo${job.total === 1 ? '' : 's'} in the background…`);
+  watchOcrJob(job);
+}
+
+// Ask the server how the job is going every 1.5 seconds. Each note is shown as soon as its
+// photo has been read, instead of all of them at the very end.
+const OCR_POLL_MS = 1500;
+async function watchOcrJob(job) {
+  const user = currentUser;
+  const shown = new Set();
+  for (;;) {
+    if (currentUser !== user) return; // signed out meanwhile
+    for (const id of job.notes.map(String)) {
+      if (shown.has(id)) continue;
+      shown.add(id);
+      try {
+        showNewNote(rememberNote(noteFromApi(await api(`/api/notes/${id}/`))));
+        render();
+      } catch {}
+    }
+    if (job.status === 'done' || job.status === 'failed') break;
+    if (job.done) toast(`Reading photos… ${job.done} / ${job.total}`);
+    await new Promise((resolve) => setTimeout(resolve, OCR_POLL_MS));
+    try {
+      job = await api(`/api/notes/ocr/${job.id}/`);
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
+  }
+  refreshNoteCounts();
+  const created = `${job.done} note${job.done === 1 ? '' : 's'} created from your photos.`;
+  if (job.status === 'failed') toast(job.error || 'Your photos could not be read.');
+  else if (job.failed) toast(`${created} ${job.error}`); // some photos worked, some didn't
+  else toast(created);
 }
 
 document.getElementById('ocr-scan').addEventListener('animationiteration', () => {

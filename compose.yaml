@@ -1,4 +1,23 @@
+# The settings shared by every container that runs our Django code (web, worker, beat).
+# They all use the same image; only the command they start with differs.
+x-app: &app
+  build: .
+  image: studyflowmd-app
+  env_file: .env
+  environment:
+    POSTGRES_HOST: db
+    REDIS_URL: redis://redis:6379
+    # Tesseract normally spreads one photo over several CPU cores. We already read 8 photos
+    # in parallel, so each Tesseract gets exactly one core; otherwise they fight over cores.
+    OMP_THREAD_LIMIT: "1"
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
+  # PostgreSQL: stores everything permanent (accounts, notes, tasks, upload jobs).
   db:
     image: postgres:18
     environment:
@@ -15,16 +34,35 @@ services:
       timeout: 3s
       retries: 10
 
+  # Redis: the queue of jobs waiting for a worker, plus the shared rate-limit counters.
+  # No "ports": only the other containers can reach it, never anything outside Docker.
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # The web server: answers the browser. It only ever does quick things.
   web:
-    build: .
+    <<: *app
     ports:
       - "127.0.0.1:8000:8000"
-    env_file: .env
-    environment:
-      POSTGRES_HOST: db
-    depends_on:
-      db:
-        condition: service_healthy
+
+  # Workers: take tickets from Redis and do the slow work (one ticket = one photo to read).
+  # Each worker reads up to 8 photos at once: one CPU core and up to ~200 MB of RAM each,
+  # which leaves half of a 16-core machine free for everything else. With more machines,
+  # add more workers:  docker compose up -d --scale worker=3
+  worker:
+    <<: *app
+    command: celery -A config worker -l info --concurrency 8
+
+  # The clock: puts scheduled jobs into the queue (daily reminders, hourly cleanup).
+  # There must only ever be one, or every scheduled job would be queued twice.
+  beat:
+    <<: *app
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
 
 volumes:
   postgres_data:

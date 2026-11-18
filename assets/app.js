@@ -38,16 +38,16 @@ function getCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : '';
 }
-async function api(path, { method = 'GET', body } = {}) {
+// `body` is sent as JSON; `form` (a FormData with files) is sent as a multipart upload,
+// where the browser sets the Content-Type itself so it can include the file boundaries.
+async function api(path, { method = 'GET', body, form } = {}) {
+  const headers = { 'X-CSRFToken': getCookie('csrftoken'), 'Accept-Language': currentLang };
+  if (!form) headers['Content-Type'] = 'application/json';
   const response = await fetch(path, {
     method,
     credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCookie('csrftoken'),
-      'Accept-Language': currentLang,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers,
+    body: form ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
   const data = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) throw new Error(apiErrorMessage(data));
@@ -954,16 +954,16 @@ function openImport() {
 $('#folder-new').onclick = () => openNote();
 $('#import-form').onsubmit = async (event) => {
   event.preventDefault();
-  if (typeof currentImportMode === 'function' && currentImportMode() === 'image') {
-    startOcrPreview();
-    return;
-  }
-  const files = [...$('#import-file').files];
   const subject = $('#import-subject').value;
   if (isSharedSubject(subject)) {
     $('#import-error').textContent = 'This subject is read-only.';
     return;
   }
+  if (typeof currentImportMode === 'function' && currentImportMode() === 'image') {
+    await runOcrImport(state.subjects.find((s) => s.name === subject && s.role === 'owner')?.id);
+    return;
+  }
+  const files = [...$('#import-file').files];
   if (!files.length) return;
   if (files.some((f) => !/\.(md|txt)$/i.test(f.name) || f.size > 10 * 1024 * 1024)) {
     $('#import-error').textContent = 'Use .txt or .md files under 10 MB each. Nothing was imported.';

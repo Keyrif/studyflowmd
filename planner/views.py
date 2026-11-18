@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Func, IntegerField, Q
 from django.db.models.functions import Substr
 from rest_framework import permissions, status, viewsets
@@ -6,11 +7,29 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from .models import Note, Subject, Task, generate_invite_code
+from .models import Note, OcrJob, OcrPhoto, Subject, Task, generate_invite_code
+from .ocr import OcrError, check_image, read_upload
 from .pagination import NotePagination
+from .tasks import advance_upload
 from .serializers import NoteListSerializer, NoteSerializer, SubjectSerializer, TaskSerializer
 
 PREVIEW_LENGTH = 240
+MAX_IMAGES_PER_UPLOAD = 10
+
+
+def ocr_job_data(job):
+    """What the browser needs to show progress: status, counts, and the notes made so far."""
+    job.refresh_from_db(fields=['status', 'error'])
+    photos = list(job.photos.values_list('state', 'note_id'))
+    return {
+        'id': str(job.id),
+        'status': job.status,
+        'error': job.error,
+        'total': len(photos),
+        'done': sum(1 for state, _ in photos if state == OcrPhoto.DONE),
+        'failed': sum(1 for state, _ in photos if state == OcrPhoto.FAILED),
+        'notes': [note_id for state, note_id in photos if state == OcrPhoto.DONE and note_id],
+    }
 
 
 class OctetLength(Func):
@@ -40,10 +59,13 @@ class NoteViewSet(viewsets.ModelViewSet):
         ?search=matrix               only notes whose title, text, or subject matches
     GET /api/notes/12/               one full note, with its text
     GET /api/notes/export/?subject=5 every full note in subject 5 (for the skill ZIP)
+    POST /api/notes/ocr/             queue photos to be read; answers at once with a job id
+    GET  /api/notes/ocr/<job id>/    how that job is going, and which notes it created
     """
 
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = NotePagination
+    throttle_scope = None  # set to 'ocr' on the ocr action below
 
     def get_serializer_class(self):
         return NoteListSerializer if self.action == 'list' else NoteSerializer
@@ -87,6 +109,56 @@ class NoteViewSet(viewsets.ModelViewSet):
     def export(self, request):
         notes = self.subject_filter(self.visible_notes(), required=True)
         return Response(NoteSerializer(notes, many=True, context=self.get_serializer_context()).data)
+
+    # Reading photos is heavy work for the server, so each user gets a limited number of uploads.
+    @action(detail=False, methods=['post'], throttle_classes=[ScopedRateThrottle], throttle_scope='ocr')
+    def ocr(self, request):
+        images = request.FILES.getlist('images')
+        # Set by config.uploads.UploadSizeLimitHandler when it cut an upload off mid-way.
+        if getattr(request, 'upload_too_large', False):
+            return Response({'error': 'Photos must be 10 MB or smaller each.'},
+                            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        if not images:
+            return Response({'error': 'Choose at least one photo.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(images) > MAX_IMAGES_PER_UPLOAD:
+            return Response({'error': f'Upload at most {MAX_IMAGES_PER_UPLOAD} photos at once.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Check the target subject with the same rules as a normal new note (your own subjects only).
+        subject = request.data.get('subject') or None
+        check = NoteSerializer(data={'title': 'check', 'subject': subject}, context=self.get_serializer_context())
+        if not check.is_valid():
+            return Response({'error': 'You can only add notes to your own subjects.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Quick checks on every photo before accepting any, so one bad file rejects the whole
+        # upload right away instead of failing later in the background.
+        try:
+            photos = [(upload.name[:255], read_upload(upload)) for upload in images]
+            for name, data in photos:
+                check_image(data, name)
+        except OcrError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Store the photos and the job, then hand the job to a worker. Reading the photos is
+        # the slow part, and the user doesn't wait for it: this request finishes right away.
+        with transaction.atomic():
+            job = OcrJob.objects.create(user=request.user, subject=check.validated_data.get('subject'))
+            OcrPhoto.objects.bulk_create(
+                OcrPhoto(job=job, position=index, name=name, data=data) for index, (name, data) in enumerate(photos)
+            )
+            # Once the photos are really saved, put the upload's first few photos in the queue
+            # (its "window"); each finished photo then queues the next one.
+            transaction.on_commit(lambda: advance_upload(job.id))
+        return Response(ocr_job_data(job), status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=['get'], url_path=r'ocr/(?P<job_id>[0-9a-f-]{36})')
+    def ocr_status(self, request, job_id=None):
+        # Filtering by user means someone else's job id simply "doesn't exist" for you.
+        job = OcrJob.objects.filter(pk=job_id, user=request.user).first()
+        if job is None:
+            return Response({'error': 'Upload not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ocr_job_data(job))
 
     def _require_author(self, note):
         if note.user_id != self.request.user.id:

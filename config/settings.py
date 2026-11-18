@@ -11,8 +11,11 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
+from celery.schedules import crontab
+from django.utils.csp import CSP
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -45,6 +48,23 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 X_FRAME_OPTIONS = 'DENY'
 
+# Content Security Policy: the browser only runs scripts and loads files from the sources
+# listed here. If an XSS bug ever slipped through (user text inserted without escaping), the
+# injected script would simply not run. It is a second lock behind escapeHTML().
+SECURE_CSP = {
+    'default-src': [CSP.SELF],
+    'script-src': [CSP.SELF],                     # only our own .js files; no inline scripts, no eval
+    'style-src': [CSP.SELF, CSP.UNSAFE_INLINE,    # the app sets colors through style="..." attributes
+                  'https://fonts.googleapis.com'],
+    'font-src': [CSP.SELF, 'https://fonts.gstatic.com'],
+    'img-src': [CSP.SELF, 'data:', 'blob:'],      # Bootstrap's inline SVG icons; OCR photo previews
+    'connect-src': [CSP.SELF],                    # the page may only call our own API
+    'object-src': [CSP.NONE],
+    'base-uri': [CSP.NONE],
+    'form-action': [CSP.SELF],
+    'frame-ancestors': [CSP.NONE],                # nobody may embed the app in a frame
+}
+
 
 # Application definition
 
@@ -69,6 +89,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -145,6 +166,44 @@ STATICFILES_DIRS = [BASE_DIR / 'assets']
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 
+# Uploaded files pass through these in order. The first one counts bytes as they arrive and
+# cuts off anything too large; the other two are Django's defaults (memory, then temp file).
+FILE_UPLOAD_HANDLERS = [
+    'config.uploads.UploadSizeLimitHandler',
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
+DATA_UPLOAD_MAX_NUMBER_FILES = 10
+
+
+# Redis, Celery, and the cache
+# Inside Docker, REDIS_URL points at the redis container. Redis holds two separate things:
+#   database 0: the job queue between the web app and the workers (Celery's "broker")
+#   database 1: the shared cache, which is where rate-limit counters live. Every web process
+#               and every container sees the same counts, so limits can't be dodged by
+#               landing on a different process.
+# Without REDIS_URL (running `manage.py runserver` outside Docker), everything still works:
+# the cache stays in memory and jobs run immediately instead of in the background.
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
+REDIS_URL = os.environ.get('REDIS_URL', '').rstrip('/')
+
+if REDIS_URL and not TESTING:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': f'{REDIS_URL}/1'}}
+else:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+CELERY_BROKER_URL = f'{REDIS_URL}/0' if REDIS_URL else 'memory://'
+CELERY_TASK_ALWAYS_EAGER = TESTING or not REDIS_URL  # no Redis: run jobs right away, in-process
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_ACKS_LATE = True             # a job only counts as done after it finished, so if a
+CELERY_TASK_REJECT_ON_WORKER_LOST = True # worker crashes mid-job, another worker redoes it
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1    # take one job at a time: long OCR jobs don't pile up on one worker
+CELERY_TIMEZONE = 'Europe/Bucharest'
+CELERY_BEAT_SCHEDULE = {
+    'deadline-reminders': {'task': 'planner.tasks.send_deadline_reminders', 'schedule': crontab(hour=8, minute=0)},
+    'clean-up-ocr-jobs': {'task': 'planner.tasks.clean_up_ocr_jobs', 'schedule': crontab(minute=30)},
+}
+
 
 # Django REST Framework
 # Only session (cookie) logins are accepted. DRF's default also allows HTTP Basic auth,
@@ -153,9 +212,13 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    # Plain JSON only. The clickable "browsable API" pages need an inline script, which the
+    # Content Security Policy forbids, and the app never uses them.
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     'DEFAULT_THROTTLE_RATES': {
         'auth': '5/min',   # sign-in and registration attempts per visitor
         'join': '10/min',  # invitation-code guesses per user
+        'ocr': '30/hour',  # photo uploads per user (each can hold up to 10 photos)
     },
 }
 
