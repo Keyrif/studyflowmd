@@ -6,6 +6,7 @@ O platformă pentru studenți care permite gestionarea termenelor limită și a 
 - **API**: Django REST Framework
 - **OCR text:** Tesseract (pytesseract) și Pillow
 - **OCR matematică:** pix2tex (LaTeX-OCR) cu PyTorch, formule salvate în LaTeX
+- **Notificări push**: Web Push API, Service Worker, pywebpush
 - **Frontend**: JavaScript (ES6+), Bootstrap 5, CSS3 Custom Styles
 - **Bază de date**: PostgreSQL
 - **Task Queue**: Celery & Redis (pentru procesări asincrone)
