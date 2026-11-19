@@ -2,6 +2,26 @@
   margin: 4px 0 6px;
 }
 
+/* "What's in the photos?" Text / Math: an M3 segmented button made of two radio buttons. */
+.ocr-kind {
+  display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 4px;
+  border: 1px solid var(--m3-outline, var(--line)); border-radius: 999px; overflow: hidden;
+}
+.ocr-kind label {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px;
+  cursor: pointer; font-weight: 500; font-size: calc(12px * var(--font-scale, 1));
+  color: var(--m3-on-surface, var(--text)); transition: background-color .2s ease, color .2s ease;
+}
+.ocr-kind label + label { border-left: 1px solid var(--m3-outline, var(--line)); }
+.ocr-kind input { position: absolute; opacity: 0; pointer-events: none; }
+.ocr-kind svg { width: 17px; height: 17px; }
+.ocr-kind label:hover { background: color-mix(in srgb, var(--m3-on-surface, var(--text)) 6%, transparent); }
+.ocr-kind label:has(input:checked) {
+  background: var(--m3-secondary-container, var(--line)); color: var(--m3-on-secondary-container, var(--text));
+}
+.ocr-kind label:has(input:focus-visible) { outline: 2px solid var(--m3-primary, var(--accent)); outline-offset: -3px; }
+[data-theme="cs"] .ocr-kind { border-radius: 0; }
+
 .ocr-loading {
   display: flex;
   flex-direction: column;

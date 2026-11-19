@@ -75,7 +75,7 @@ async function openSkillExport(id) {
   $('#skill-summary').textContent=`${subject.name} · ${count} saved file${count===1?'':'s'}`;
   $('#skill-options').innerHTML=skillOptions.map(([key,label,,checked])=>`<label class="skill-option"><input type="checkbox" id="skill-${key}" ${checked?'checked':''}><span>${label}</span></label>`).join('');
   $('#skill-dialog details').open=false;
-  updateSkillPreview();$('#skill-dialog').showModal();$('#skill-name').focus();
+  updateSkillPreview();$('#skill-dialog').showModal();focusField($('#skill-name'));
 }
 document.addEventListener('click',event=>{
   const button=event.target.closest('[data-export-skill]');

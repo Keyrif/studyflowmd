@@ -12,6 +12,18 @@ let ocrImageIndex = 0;
 
 const currentImportMode = () => importMode;
 
+// Photos of text (read by Tesseract) or of maths (cut into lines, each read by pix2tex).
+const ocrKind = () => document.querySelector('input[name="ocr-kind"]:checked')?.value || 'text';
+const OCR_KIND_HELP = {
+  text: 'Up to 10 JPG, PNG or WebP photos, 10 MB each. Each photo becomes a Markdown note.',
+  math: 'Each line of maths becomes a formula. Works best on printed maths, photographed straight on.',
+};
+function updateOcrKindHelp() {
+  const help = document.getElementById('ocr-kind-help');
+  help.textContent = OCR_KIND_HELP[ocrKind()];
+  if (typeof translateTree === 'function') translateTree(help);
+}
+
 function setImportMode(mode) {
   importMode = mode === 'image' ? 'image' : 'text';
   const image = importMode === 'image';
@@ -125,6 +137,7 @@ async function runOcrImport(subjectId) {
   const form = new FormData();
   [...document.getElementById('import-images').files].forEach((file) => form.append('images', file));
   if (subjectId) form.append('subject', subjectId);
+  form.append('mode', ocrKind());
   let job;
   try {
     job = await api('/api/notes/ocr/', { method: 'POST', form });
@@ -153,7 +166,7 @@ function trackUpload(job) {
   const subject = state.subjects.find((s) => s.id === String(job.subject))?.name || '';
   uploads.set(job.id, {
     subject,
-    photos: job.photos.map((photo, index) => ({ key: `${job.id}-${index}`, name: photo.name, state: photo.state })),
+    photos: job.photos.map((photo, index) => ({ key: `${job.id}-${index}`, name: photo.name, state: photo.state, mode: job.mode })),
   });
   updateUpload(job);
 }
@@ -172,11 +185,12 @@ function updateUpload(job) {
 
 // Shown progress: a small start while waiting in line, then easing towards 90% while being
 // read (we can't see inside Tesseract, so this part is an estimate), 100% once it's done.
+// Maths is slower: every line is read separately, and the model may first need loading.
 function uploadProgress(photo) {
   if (photo.state === 'done' || photo.state === 'failed') return 100;
   if (photo.state !== 'queued') return 6;
   const seconds = (performance.now() - photo.since) / 1000;
-  return Math.round(12 + 78 * (1 - Math.exp(-seconds / 2.5)));
+  return Math.round(12 + 78 * (1 - Math.exp(-seconds / (photo.mode === 'math' ? 12 : 2.5))));
 }
 
 // The placeholders a list should show; `subject` limits them to one subject's files.
@@ -291,7 +305,9 @@ document.getElementById('import-image-tab').addEventListener('click', () => setI
 document.getElementById('import-form').addEventListener('reset', () => {
   stopOcrPreview();
   setImportMode('text');
+  setTimeout(updateOcrKindHelp); // the radio buttons are reset just after this event
 });
+document.querySelectorAll('input[name="ocr-kind"]').forEach((radio) => radio.addEventListener('change', updateOcrKindHelp));
 document.getElementById('import-dialog').addEventListener('close', stopOcrPreview);
 
 setImportMode('text');

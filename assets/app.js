@@ -29,6 +29,11 @@ const icons = {
   x: '<path d="m6 6 12 12M6 18 18 6"/>',
   star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2Z"/><path d="M10 21h4"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  sigma: '<path d="M18 5H6l6 7-6 7h12"/>',
+  expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>',
   globe:
     '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -383,11 +388,11 @@ function render() {
   if (typeof renderFollowWidget === 'function') renderFollowWidget();
 }
 const views = {
-  dashboard: ['Overview', 'Room to think. Space to grow.', 'Your studies, a little more in flow.'],
-  tasks: ['My tasks', 'One thing at a time.', 'A clear place for everything on your list.'],
+  dashboard: ['Overview', 'Your place to learn'],
+  tasks: ['My tasks', 'One thing at a time', 'Here you find all your tasks, pin them so you do not forget!'],
   notes: ['Notes library', 'Keep your ideas close.', 'All your text and Markdown files.'],
-  subjects: ['Subjects', 'Your semester, in perspective.', 'A home for every collection of notes.'],
-  calendar: ['Calendar', 'A little room to plan.', 'Deadlines, exams, and everything coming up.'],
+  subjects: ['Subjects', 'Your collection of subjects', 'Here you will find all your subjects, either made by you or shared by your friends'],
+  calendar: ['Calendar', 'Plan your semester', 'Deadlines, exams, and everything coming up.'],
   subject: ['Subjects', '', 'Text and Markdown files'],
 };
 function navigate() {
@@ -458,7 +463,7 @@ function openTask(id, date, button) {
   $('#task-kind').value = task?.kind || 'Assignment';
   $('#task-dialog-title').textContent = task ? 'A little adjustment' : 'A new small step';
   openFromButton($('#task-dialog'), button, () => $('#task-dialog').showModal());
-  $('#task-title').focus();
+  focusField($('#task-title'));
 }
 // `button`: pass it to make the dialog grow out of that button (see openFromButton).
 async function openNote(id, imported, button) {
@@ -490,9 +495,20 @@ async function openNote(id, imported, button) {
   $('#note-title').value = note?.title || '';
   $('#note-subject').value = note?.subject ?? activeSubject?.name ?? state.subjects[0]?.name ?? '';
   $('#note-body').value = note?.body || '';
+  // Markdown notes with text open formatted (markdown.js); empty ones open for typing.
+  if (typeof resetNotePreview === 'function') resetNotePreview();
   $('#delete-note').hidden = !note?.id || readonly;
   openFromButton($('#note-dialog'), button, () => $('#note-dialog').showModal());
-  $('#note-title').focus();
+  // An existing note opens for reading, so only a new one jumps into the title field.
+  if (!note) focusField($('#note-title'));
+}
+// Phones and tablets: focusing a text field pops the keyboard up over half the screen,
+// so a dialog opened with a tap waits for the user to tap a field themselves.
+const touchScreen = matchMedia('(pointer: coarse)');
+function focusField(field) {
+  if (!touchScreen.matches) return field.focus();
+  // showModal() itself focuses the first field it finds; undo that on touch screens.
+  if (document.activeElement?.matches('input, textarea, select')) document.activeElement.blur();
 }
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button');
@@ -802,7 +818,7 @@ function openSubject(id, button) {
   $('#subject-dialog-title').textContent = subject ? 'Subject settings' : 'New subject';
   if (subject) renderAccess(subject);
   openFromButton($('#subject-dialog'), button, () => $('#subject-dialog').showModal());
-  $('#subject-name').focus();
+  focusField($('#subject-name'));
 }
 $('#subject-form').onsubmit = async (event) => {
   event.preventDefault();
@@ -1076,7 +1092,7 @@ function taskUrgency(task) {
 function openDuration() {
   $('#focus-minutes').value = durationMinutes;
   $('#duration-dialog').showModal();
-  $('#focus-minutes').focus();
+  focusField($('#focus-minutes'));
 }
 $('#timer').onclick = $('#mini-duration').onclick = openDuration;
 $('#duration-form').onsubmit = (event) => {
@@ -1295,7 +1311,7 @@ $('#join-subject').onclick = () => {
   $('#join-code').value = '';
   $('#join-error').textContent = '';
   openFromButton($('#join-dialog'), $('#join-subject'), () => $('#join-dialog').showModal());
-  $('#join-code').focus();
+  focusField($('#join-code'));
 };
 $('#join-form').onsubmit = async (event) => {
   event.preventDefault();

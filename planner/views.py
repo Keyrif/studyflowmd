@@ -29,6 +29,7 @@ def ocr_job_data(job):
         'status': job.status,
         'error': job.error,
         'subject': job.subject_id,
+        'mode': job.mode,
         'total': len(photos),
         'done': sum(1 for _, state, _ in photos if state == OcrPhoto.DONE),
         'failed': sum(1 for _, state, _ in photos if state == OcrPhoto.FAILED),
@@ -129,6 +130,10 @@ class NoteViewSet(viewsets.ModelViewSet):
         if len(images) > MAX_IMAGES_PER_UPLOAD:
             return Response({'error': f'Upload at most {MAX_IMAGES_PER_UPLOAD} photos at once.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        # "text" (the default): read with Tesseract. "math": lines of formulas, read with pix2tex.
+        mode = request.data.get('mode') or OcrJob.TEXT
+        if mode not in (OcrJob.TEXT, OcrJob.MATH):
+            return Response({'error': 'Choose text or math photos.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check the target subject with the same rules as a normal new note (your own subjects only).
         subject = request.data.get('subject') or None
@@ -149,7 +154,7 @@ class NoteViewSet(viewsets.ModelViewSet):
         # Store the photos and the job, then hand the job to a worker. Reading the photos is
         # the slow part, and the user doesn't wait for it: this request finishes right away.
         with transaction.atomic():
-            job = OcrJob.objects.create(user=request.user, subject=check.validated_data.get('subject'))
+            job = OcrJob.objects.create(user=request.user, subject=check.validated_data.get('subject'), mode=mode)
             OcrPhoto.objects.bulk_create(
                 OcrPhoto(job=job, position=index, name=name, data=data) for index, (name, data) in enumerate(photos)
             )

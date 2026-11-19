@@ -465,6 +465,135 @@ class RealTesseractTests(PlannerTestCase):
         self.assertIn('lecture', body)
 
 
+def maths_page(rows, size=(1200, 900)):
+    """A white page with black bars standing in for lines of maths.
+
+    `rows` are (top, height) pairs, so tests control exactly where the "ink" is, including
+    the small gaps inside a fraction.
+    """
+    image = Image.new('L', size, 255)
+    draw = ImageDraw.Draw(image)
+    for top, height in rows:
+        draw.rectangle((100, top, 900, top + height - 1), fill=0)
+    return image
+
+
+def png(image, name='maths.png'):
+    buffer = io.BytesIO()
+    image.save(buffer, 'PNG')
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type='image/png')
+
+
+class MathLineSplitTests(PlannerTestCase):
+    """Cutting a photo of maths into one image per line, before pix2tex reads each line."""
+
+    def heights(self, rows, **kwargs):
+        from .math_ocr import split_lines
+        return [line.height - 2 * 12 for line in split_lines(maths_page(rows, **kwargs))]  # minus the white margin
+
+    def test_ten_lines_become_ten_images_top_to_bottom(self):
+        self.assertEqual(self.heights([(40 + i * 80, 40) for i in range(10)]), [40] * 10)
+
+    def test_a_fraction_stays_one_line(self):
+        # numerator, bar, denominator, with small white gaps between them, then a normal line
+        fraction = [(100, 30), (136, 4), (146, 30)]
+        self.assertEqual(self.heights([(40, 40), *fraction, (260, 40)]), [40, 76, 40])
+
+    def test_an_exponent_above_its_line_is_kept_with_it(self):
+        self.assertEqual(self.heights([(100, 14), (118, 40), (240, 40)]), [58, 40])
+
+    def test_specks_and_an_empty_page_give_no_lines(self):
+        self.assertEqual(self.heights([]), [])
+        self.assertEqual(self.heights([(300, 2), (500, 3)]), [])
+
+    def test_each_line_is_trimmed_to_its_writing_with_a_white_margin(self):
+        from .math_ocr import split_lines
+        line = split_lines(maths_page([(100, 40)]))[0]
+        self.assertEqual(line.size, (801 + 24, 40 + 24))  # the bar spans x = 100..900, both included
+        self.assertEqual(line.getpixel((0, 0)), 255)
+
+    def test_very_long_pages_are_cut_off(self):
+        from .math_ocr import MAX_LINES
+        self.assertEqual(len(self.heights([(10 + i * 30, 15) for i in range(60)], size=(1200, 1900))), MAX_LINES)
+
+
+class FakeLatexModel:
+    """Stands in for pix2tex: answers with a different formula for every line it's given."""
+
+    def __init__(self):
+        self.lines = []
+
+    def __call__(self, image):
+        self.lines.append(image)
+        return f'x_{len(self.lines)}^2'
+
+
+class MathUploadTests(PlannerTestCase):
+    """Upload photos as "math": each line becomes a $$ formula $$ in the note."""
+
+    def setUp(self):
+        super().setUp()
+        self.as_user(self.owner)
+        self.model = FakeLatexModel()
+        patcher = mock.patch('planner.math_ocr.get_model', return_value=self.model)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def upload(self, *files, **extra):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post('/api/notes/ocr/', {'images': list(files), **extra}, format='multipart')
+
+    def test_each_line_of_maths_becomes_a_formula_block(self):
+        response = self.upload(png(maths_page([(40 + i * 80, 40) for i in range(3)])), mode='math')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data['mode'], 'math')
+        job = self.client.get(f"/api/notes/ocr/{response.data['id']}/").data
+        note = Note.objects.get(pk=job['notes'][0])
+        self.assertEqual(note.body, '$$\nx_1^2\n$$\n\n$$\nx_2^2\n$$\n\n$$\nx_3^2\n$$')
+        self.assertEqual(note.format, 'md')
+
+    def test_math_photos_go_to_the_math_queue(self):
+        with mock.patch('planner.tasks.read_math_photo.delay') as math_queue, \
+                mock.patch('planner.tasks.read_photo.delay') as text_queue:
+            self.upload(png(maths_page([(40, 40)])), mode='math')
+        self.assertEqual(math_queue.call_count, 1)
+        text_queue.assert_not_called()
+        from django.conf import settings
+        self.assertEqual(settings.CELERY_TASK_ROUTES['planner.tasks.read_math_photo'], {'queue': 'math'})
+
+    def test_text_is_still_the_default(self):
+        with mock.patch('planner.tasks.read_math_photo.delay') as math_queue, \
+                mock.patch('planner.tasks.read_photo.delay') as text_queue:
+            response = self.upload(photo())
+        self.assertEqual(response.data['mode'], 'text')
+        self.assertEqual(text_queue.call_count, 1)
+        math_queue.assert_not_called()
+
+    def test_unknown_mode_is_rejected(self):
+        self.assertEqual(self.upload(photo(), mode='chemistry').status_code, 400)
+        self.assertFalse(OcrJob.objects.exists())
+
+    def test_a_page_without_maths_still_creates_a_note(self):
+        job = self.client.get(f"/api/notes/ocr/{self.upload(png(maths_page([])), mode='math').data['id']}/").data
+        self.assertIn('No formulas', Note.objects.get(pk=job['notes'][0]).body)
+
+    def test_one_unreadable_line_does_not_lose_the_others(self):
+        self.model = mock.Mock(side_effect=['a+b', RuntimeError('model crashed'), 'c'])
+        with mock.patch('planner.math_ocr.get_model', return_value=self.model):
+            job_id = self.upload(png(maths_page([(40, 40), (120, 40), (200, 40)])), mode='math').data['id']
+        body = Note.objects.get(pk=self.client.get(f'/api/notes/ocr/{job_id}/').data['notes'][0]).body
+        self.assertEqual(body, '$$\na+b\n$$\n\n_(This line could not be read.)_\n\n$$\nc\n$$')
+
+    def test_without_pix2tex_the_upload_fails_with_a_clear_error(self):
+        # The web container doesn't have pix2tex; if a math job ever runs there, say so plainly.
+        from .math_ocr import MathOcrUnavailable
+        with mock.patch('planner.math_ocr.get_model', side_effect=MathOcrUnavailable('Math recognition is not installed on the server yet.')):
+            job = self.client.get(f"/api/notes/ocr/{self.upload(png(maths_page([(40, 40)])), mode='math').data['id']}/").data
+        self.assertEqual(job['status'], 'failed')
+        self.assertIn('not installed', job['error'])
+        self.assertFalse(OcrPhoto.objects.filter(data__isnull=False).exists())
+
+
 class ReminderTests(PlannerTestCase):
     """The daily job that emails students about tasks due tomorrow."""
 

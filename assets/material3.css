@@ -106,19 +106,27 @@ html:not([data-theme="cs"]) .brand-symbol { color:var(--m3-primary); }
 html:not([data-theme="cs"]) .brand-md { color:var(--m3-primary); font-weight:600; }
 /* The logo glows in the theme's primary color on hover or keyboard focus, and flashes brighter
    when clicked. A drop-shadow follows the exact shape of the icon and letters. */
+/* Plain rgb() glow colors on purpose: some browsers paint color-mix() inside a drop-shadow
+   filter (and its animation) with the wrong hue, which showed up as a green glow. */
 html:not([data-theme="cs"]) .brand {
-  --brand-glow:color-mix(in srgb,var(--m3-primary) 75%,transparent);
+  --brand-glow:rgb(109 43 195 / .75); --brand-halo:rgb(109 43 195 / .4);
+  --brand-pink:rgb(244 114 208); --brand-pink-halo:rgb(196 92 236 / .75);
   transition:filter .35s ease,transform .45s var(--spring);
+  /* Phones paint their own (often green) highlight on tapped links; the flash replaces it. */
+  -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; user-select:none;
 }
+html[data-theme="dark"] .brand { --brand-glow:rgb(217 182 255 / .75); --brand-halo:rgb(217 182 255 / .4); }
+html:not([data-theme="cs"]) .brand:focus:not(:focus-visible) { outline:none; }
 html:not([data-theme="cs"]) .brand:is(:hover,:focus-visible) {
-  filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px color-mix(in srgb,var(--m3-primary) 40%,transparent));
+  filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px var(--brand-halo));
 }
 html:not([data-theme="cs"]) .brand:active { transform:scale(.96); }
 html:not([data-theme="cs"]) .brand.brand-flash { animation:brand-flash .7s ease-out; }
 @keyframes brand-flash {
-  0%   { filter:drop-shadow(0 0 2px var(--brand-glow)); }
-  30%  { filter:drop-shadow(0 0 8px var(--m3-primary)) drop-shadow(0 0 26px var(--brand-glow)); }
-  100% { filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px color-mix(in srgb,var(--m3-primary) 40%,transparent)); }
+  0%   { filter:drop-shadow(0 0 2px var(--brand-glow)) drop-shadow(0 0 6px var(--brand-halo)); }
+  /* Peak: a hot pink core inside a purple halo. */
+  30%  { filter:drop-shadow(0 0 6px var(--brand-pink)) drop-shadow(0 0 22px var(--brand-pink-halo)); }
+  100% { filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px var(--brand-halo)); }
 }
 @media (prefers-reduced-motion:reduce) { html:not([data-theme="cs"]) .brand.brand-flash { animation:none; } }
 html:not([data-theme="cs"]) .workspace { background:color-mix(in srgb,var(--m3-surface-container-high) 80%,transparent); border:0; border-radius:20px; font-weight:600; }

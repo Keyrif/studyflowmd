@@ -22,6 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 from pytesseract import TesseractNotFoundError
 
+from .math_ocr import NO_MATH, MathOcrUnavailable, image_to_latex
 from .models import Note, Notification, OcrJob, OcrPhoto, Task
 from .ocr import OcrError, image_to_text
 from .push import send_to_user
@@ -50,8 +51,10 @@ def advance_upload(job_id):
         if next_ids:
             photos.filter(id__in=next_ids).update(state=OcrPhoto.QUEUED)
             # Put the tickets in Redis only once this is saved, so a fast worker can't look
-            # for a photo whose "queued" state isn't visible yet.
-            transaction.on_commit(lambda: [read_photo.delay(photo_id) for photo_id in next_ids])
+            # for a photo whose "queued" state isn't visible yet. Maths goes to its own queue,
+            # read by the math worker (settings.CELERY_TASK_ROUTES).
+            reader = read_math_photo if job.mode == OcrJob.MATH else read_photo
+            transaction.on_commit(lambda: [reader.delay(photo_id) for photo_id in next_ids])
         elif not photos.filter(state__in=[OcrPhoto.WAITING, OcrPhoto.QUEUED]).exists():
             failed = photos.filter(state=OcrPhoto.FAILED).count()
             read = photos.filter(state=OcrPhoto.DONE).count()
@@ -71,7 +74,18 @@ def _fail_upload(job, message):
 
 @shared_task
 def read_photo(photo_id):
-    """One ticket: read one photo and turn it into a note.
+    """One ticket: read one photo of text (Tesseract) and turn it into a note."""
+    _read(photo_id, image_to_text, NO_TEXT)
+
+
+@shared_task
+def read_math_photo(photo_id):
+    """One ticket for the math worker: read one photo of maths (pix2tex) into a note."""
+    _read(photo_id, image_to_latex, NO_MATH)
+
+
+def _read(photo_id, reader, empty_text):
+    """Read one photo with `reader` and turn it into a note.
 
     Safe to receive twice. A ticket only counts as handled once this function returns
     (CELERY_TASK_ACKS_LATE), so if a worker crashes mid-photo, Redis gives the ticket to
@@ -90,7 +104,7 @@ def read_photo(photo_id):
             if job.status == OcrJob.QUEUED:
                 OcrJob.objects.filter(pk=job.pk).update(status=OcrJob.RUNNING, updated=timezone.now())
             try:
-                text = image_to_text(bytes(photo.data), photo.name)
+                text = reader(bytes(photo.data), photo.name)
             except OcrError as error:
                 photo.state, photo.error, photo.data = OcrPhoto.FAILED, str(error)[:300], None
                 photo.save(update_fields=['state', 'error', 'data'])
@@ -98,13 +112,17 @@ def read_photo(photo_id):
             # The note and "this photo is done" are saved together, or not at all.
             photo.note = Note.objects.create(
                 user=job.user, subject=job.subject, format='md',
-                title=Path(photo.name).stem[:200] or 'Scanned note', body=text or NO_TEXT,
+                title=Path(photo.name).stem[:200] or 'Scanned note', body=text or empty_text,
             )
             photo.state, photo.data = OcrPhoto.DONE, None  # the photo's bytes are deleted right away
             photo.save(update_fields=['note', 'state', 'data'])
     except TesseractNotFoundError:
         job = OcrJob.objects.get(pk=job_id)
         _fail_upload(job, 'Text recognition is not installed on the server yet.')
+        return
+    except MathOcrUnavailable as error:
+        job = OcrJob.objects.get(pk=job_id)
+        _fail_upload(job, str(error))
         return
     except Exception:
         # Anything unexpected: give up on this one photo (so it doesn't hold a window slot

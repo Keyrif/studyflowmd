@@ -100,9 +100,15 @@ class OcrJob(models.Model):
     QUEUED, RUNNING, DONE, FAILED = 'queued', 'running', 'done', 'failed'
     STATUS_CHOICES = [(QUEUED, 'Queued'), (RUNNING, 'Running'), (DONE, 'Done'), (FAILED, 'Failed')]
 
+    # What the photos contain, which decides who reads them: Tesseract (text) or pix2tex
+    # (lines of maths, read by the separate math worker; see planner/math_ocr.py).
+    TEXT, MATH = 'text', 'math'
+    MODE_CHOICES = [(TEXT, 'Text'), (MATH, 'Math')]
+
     id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True)
+    mode    = models.CharField(max_length=4, choices=MODE_CHOICES, default=TEXT)
     status  = models.CharField(max_length=10, choices=STATUS_CHOICES, default=QUEUED)
     error   = models.CharField(max_length=300, blank=True)
     created = models.DateTimeField(auto_now_add=True, db_index=True)

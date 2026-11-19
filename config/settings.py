@@ -199,6 +199,9 @@ CELERY_TASK_ACKS_LATE = True             # a job only counts as done after it fi
 CELERY_TASK_REJECT_ON_WORKER_LOST = True # worker crashes mid-job, another worker redoes it
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1    # take one job at a time: long OCR jobs don't pile up on one worker
 CELERY_TIMEZONE = 'Europe/Bucharest'
+# Photos of maths go to their own queue, read only by the math worker (compose.yaml), which
+# is the only container with the large pix2tex model. Everything else uses the default queue.
+CELERY_TASK_ROUTES = {'planner.tasks.read_math_photo': {'queue': 'math'}}
 CELERY_BEAT_SCHEDULE = {
     'deadline-reminders': {'task': 'planner.tasks.send_deadline_reminders', 'schedule': crontab(hour=8, minute=0)},
     'deadline-notifications': {'task': 'planner.tasks.create_deadline_notifications', 'schedule': crontab(minute=0)},

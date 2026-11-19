@@ -1,0 +1,81 @@
+/* Phones: logo on the left of the header, a hamburger on the right, and Deadlines /
+   Notifications / Subjects in a dropdown menu under it (topbar-menu.js). Desktop is unchanged. */
+
+.topbar-brand, .topbar-menu { display: none; }
+
+@media (max-width: 760px) {
+  .topbar .topbar-brand { display: flex; padding: 0 2px; font-size: calc(20px * var(--font-scale, 1)); }
+  .topbar .topbar-brand > span:last-child { display: inline; }
+  .topbar .topbar-brand .brand-symbol svg { width: 24px; height: 24px; }
+  .topbar .topbar-menu { display: grid; place-items: center; margin-left: auto; position: relative; }
+
+  /* M3 Expressive tonal icon button: a rounded square that morphs into a filled circle
+     while the menu is open, with a springy press. */
+  html:not([data-theme="cs"]) .topbar .topbar-menu {
+    width: 46px; height: 46px; border-radius: 16px;
+    background: var(--m3-secondary-container); color: var(--m3-on-secondary-container);
+    box-shadow: var(--m3-elevation-1);
+    transition: border-radius .4s var(--spring, cubic-bezier(.2, .9, .3, 1.2)), background-color .25s ease,
+      color .25s ease, transform .35s var(--spring, cubic-bezier(.2, .9, .3, 1.2));
+    -webkit-tap-highlight-color: transparent;
+  }
+  html:not([data-theme="cs"]) .topbar .topbar-menu:hover {
+    background: color-mix(in srgb, var(--m3-secondary-container) 88%, var(--m3-on-secondary-container));
+    color: var(--m3-on-secondary-container);
+  }
+  html:not([data-theme="cs"]) .topbar .topbar-menu:active { transform: scale(.9); border-radius: 12px; }
+  html:not([data-theme="cs"]) .topbar.menu-open .topbar-menu,
+  html:not([data-theme="cs"]) .topbar.menu-open .topbar-menu:hover {
+    border-radius: 23px; background: var(--m3-primary); color: var(--m3-on-primary);
+  }
+  .topbar .topbar-menu svg { width: 22px; height: 22px; animation: topbar-icon-in .3s ease both; }
+
+  /* Unread notifications: a small red dot on the hamburger, since the badge is hidden in the menu. */
+  .topbar:not(.menu-open):has(#notification-count:not([hidden])) .topbar-menu::after {
+    content: ""; position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--m3-error, #b3261e); box-shadow: 0 0 0 2px var(--m3-surface, var(--bg));
+  }
+
+  /* The menu itself. `visibility` (not display) hides it, so the Deadlines / Notifications
+     popups inside can still show after the menu folds away. */
+  .topbar .topbar-right {
+    position: fixed; top: 62px; right: 12px; z-index: 60; margin: 0;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    min-width: 220px; padding: 8px; border-radius: 24px;
+    background: var(--m3-surface-container-high, var(--popup)); box-shadow: var(--m3-elevation-3, 0 16px 50px #0005);
+    visibility: hidden;
+  }
+  .topbar.menu-open .topbar-right { visibility: visible; animation: topbar-menu-in .32s cubic-bezier(.2, .9, .3, 1.2) both; transform-origin: top right; }
+  .topbar .topbar-right .deadline-popup:not([hidden]) { visibility: visible; }
+
+  /* Menu items: full-width rows with icon and text. */
+  html .topbar .topbar-right > .button,
+  html .topbar .topbar-right > div > .button {
+    display: flex; align-items: center; width: 100%; min-height: 46px; padding: 10px 16px;
+    justify-content: flex-start; gap: 12px;
+    font-size: calc(13px * var(--font-scale, 1)); font-weight: 500; border-radius: 16px;
+    background: transparent; box-shadow: none; color: var(--m3-on-surface, var(--text));
+  }
+  html .topbar .topbar-right > .button:hover,
+  html .topbar .topbar-right > div > .button:hover {
+    background: color-mix(in srgb, var(--m3-on-surface, var(--text)) 8%, transparent);
+  }
+  .topbar .topbar-right .button svg { width: 19px; height: 19px; color: var(--m3-primary, var(--accent)); }
+  .topbar .topbar-right .notification-label { display: inline; }
+  .topbar .topbar-right #deadline-count, .topbar .topbar-right .notification-badge { margin-left: auto; }
+  .topbar .topbar-right .notification-badge { position: static; box-shadow: none; }
+
+  [data-theme="cs"] .topbar .topbar-right, [data-theme="cs"] .topbar .topbar-right .button { border-radius: 0; }
+}
+
+@keyframes topbar-menu-in {
+  from { opacity: 0; transform: scale(.85) translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes topbar-icon-in {
+  from { opacity: 0; transform: rotate(-90deg) scale(.6); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar.menu-open .topbar-right, .topbar .topbar-menu svg { animation: none; }
+}

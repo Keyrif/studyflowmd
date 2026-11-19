@@ -1,0 +1,7 @@
+# Only for the math worker image (Dockerfile target "math"); see planner/math_ocr.py.
+# PyTorch itself (torch, torchvision) is installed first, from PyTorch's CPU-only index.
+pix2tex==0.1.4
+albumentations==1.4.24
+timm==0.5.4
+x-transformers==0.15.0
+transformers==5.23.0

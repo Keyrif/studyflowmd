@@ -16,9 +16,10 @@ document.addEventListener('animationend', (event) => {
 });
 
 // Clicking the logo sends a short burst of glow (the hover glow stays while the mouse is on it).
-document.querySelector('.brand')?.addEventListener('pointerdown', (event) => {
+// Two logos: the sidebar's on desktop, the header's on phones.
+document.querySelectorAll('.brand').forEach((logo) => logo.addEventListener('pointerdown', (event) => {
   const brand = event.currentTarget;
   brand.classList.remove('brand-flash');
   void brand.offsetWidth; // restart the animation if clicked again quickly
   brand.classList.add('brand-flash');
-});
+}));
