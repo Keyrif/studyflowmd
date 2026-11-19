@@ -104,6 +104,23 @@ html:not([data-theme="cs"]) .sidebar { background:color-mix(in srgb,var(--m3-sur
 html:not([data-theme="cs"]) .brand { font-weight:700; letter-spacing:-.04em; color:var(--m3-on-surface); }
 html:not([data-theme="cs"]) .brand-symbol { color:var(--m3-primary); }
 html:not([data-theme="cs"]) .brand-md { color:var(--m3-primary); font-weight:600; }
+/* The logo glows in the theme's primary color on hover or keyboard focus, and flashes brighter
+   when clicked. A drop-shadow follows the exact shape of the icon and letters. */
+html:not([data-theme="cs"]) .brand {
+  --brand-glow:color-mix(in srgb,var(--m3-primary) 75%,transparent);
+  transition:filter .35s ease,transform .45s var(--spring);
+}
+html:not([data-theme="cs"]) .brand:is(:hover,:focus-visible) {
+  filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px color-mix(in srgb,var(--m3-primary) 40%,transparent));
+}
+html:not([data-theme="cs"]) .brand:active { transform:scale(.96); }
+html:not([data-theme="cs"]) .brand.brand-flash { animation:brand-flash .7s ease-out; }
+@keyframes brand-flash {
+  0%   { filter:drop-shadow(0 0 2px var(--brand-glow)); }
+  30%  { filter:drop-shadow(0 0 8px var(--m3-primary)) drop-shadow(0 0 26px var(--brand-glow)); }
+  100% { filter:drop-shadow(0 0 4px var(--brand-glow)) drop-shadow(0 0 14px color-mix(in srgb,var(--m3-primary) 40%,transparent)); }
+}
+@media (prefers-reduced-motion:reduce) { html:not([data-theme="cs"]) .brand.brand-flash { animation:none; } }
 html:not([data-theme="cs"]) .workspace { background:color-mix(in srgb,var(--m3-surface-container-high) 80%,transparent); border:0; border-radius:20px; font-weight:600; }
 html:not([data-theme="cs"]) .workspace-icon,html:not([data-theme="cs"]) .avatar { background:var(--m3-primary-container); color:var(--m3-on-primary-container); border:0; border-radius:12px; font-weight:700; }
 html:not([data-theme="cs"]) .sidebar nav a,html:not([data-theme="cs"]) .sidebar nav>button { border-radius:24px; padding:12px 16px; color:var(--m3-on-surface-variant); font-weight:500; }
@@ -182,7 +199,7 @@ html:not([data-theme="cs"]) .subject-card p { font-size:calc(12px * var(--font-s
 /* Note and subject cards: M3 filled cards that stay frosted. The blur and the jelly motion
    (drag, rubber band, reorder, snap-away) are unchanged; what goes is the "metallic" part:
    the outline, the bright/dark inner edges and the light sheen that followed the pointer. */
-html:not([data-theme="cs"]) :is(.note-card,.subject-card,.task-panel) {
+html:not([data-theme="cs"]) :is(.note-card,.subject-card,.task-panel,.upload-card) {
   border:0; border-radius:28px;
   background-color:var(--m3-card);
   background-image:none;
@@ -293,6 +310,34 @@ html:not([data-theme="cs"]) select option:checked { background:var(--m3-secondar
 html:not([data-theme="cs"]) .field-label { font-weight:600; color:var(--m3-on-surface-variant); letter-spacing:.02em; }
 html:not([data-theme="cs"]) .form-error { color:var(--m3-error); font-weight:500; }
 html:not([data-theme="cs"]) dialog { background:color-mix(in srgb,var(--m3-surface-container-high) 88%,transparent); border:0; border-radius:28px; padding:28px; box-shadow:var(--m3-elevation-3),inset 0 1px 0 var(--edge-hi); }
+
+/* Light mode contrast: dialogs were lavender fields on a lavender sheet. Now the sheet is
+   near-white, and fields are a visibly darker tonal fill with a clear outline. */
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog {
+  background:color-mix(in srgb,var(--m3-surface-container-lowest) 96%,transparent);
+}
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.form-control,.form-select) {
+  background-color:var(--m3-surface-container-high);
+  border-color:color-mix(in srgb,var(--m3-outline) 55%,transparent);
+}
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.form-control,.form-select):hover {
+  border-color:var(--m3-outline);
+}
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.form-control,.form-select):focus {
+  background-color:var(--m3-surface-container-lowest);
+}
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog .form-control::placeholder { color:color-mix(in srgb,var(--m3-on-surface-variant) 80%,transparent); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.field-label,.event-colors legend,.skill-options legend) { color:var(--m3-on-surface); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.sharing-help,.color-choice small) { color:var(--m3-on-surface-variant); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog .owner-line { background:var(--m3-surface-container); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog .owner-line .due { background:var(--m3-secondary-container); color:var(--m3-on-secondary-container); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog :is(.tabs,.import-tabs) { background:var(--m3-surface-container-high); }
+html:not([data-theme="cs"]):not([data-theme="dark"]) dialog .secondary { background:var(--m3-secondary-container); }
+/* The file picker's "Choose Files" button, as an M3 tonal button. */
+html:not([data-theme="cs"]) dialog input[type="file"]::file-selector-button {
+  margin:-12px 14px -12px -16px; padding:12px 18px; border:0; border-right:1px solid var(--m3-outline-variant);
+  background:var(--m3-secondary-container); color:var(--m3-on-secondary-container); font-weight:600; cursor:pointer;
+}
 html:not([data-theme="cs"]) dialog::backdrop { background:var(--m3-scrim); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
 html:not([data-theme="cs"]) .dialog-heading h2 { font-size:calc(22px * var(--font-scale,1)); font-weight:600; letter-spacing:-.02em; }
 html:not([data-theme="cs"]) .sharing-help { font-weight:400; }
@@ -329,7 +374,10 @@ html:not([data-theme="cs"]) #mini-toggle:hover { background:color-mix(in srgb,va
 /* Mini timer, followed-tasks widget and notifications panel: flat M3 floating toolbars.
    No glass sheen, inner highlights or blur; a solid tonal surface with a soft shadow,
    like the sign-in fields and buttons. */
-html:not([data-theme="cs"]) :is(.mini-focus,.follow-list,.notification-popup) {
+/* The notifications panel uses this flat look only in dark mode (Deadlines too, below);
+   in light mode both keep the brighter frosted Deadlines look. */
+html:not([data-theme="cs"]) :is(.mini-focus,.follow-list),
+html[data-theme="dark"] :is(.notification-popup,.deadline-popup) {
   background:var(--m3-surface-container-high); background-image:none;
   -webkit-backdrop-filter:none; backdrop-filter:none;
   box-shadow:var(--m3-elevation-2); border:0;

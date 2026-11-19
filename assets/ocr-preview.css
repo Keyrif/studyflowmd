@@ -93,6 +93,45 @@
   font-size: calc(11px * var(--font-scale, 1));
 }
 
+/* Text and Markdown imports: a pen writes four lines on a sheet of paper, about 1 second. */
+.write-loading { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0 4px; }
+.write-loading[hidden] { display: none; }
+.write-art { width: 200px; height: 150px; overflow: visible; }
+/* A tonal sheet that reads as paper in both themes, with clear contrast for the ink. */
+.write-paper {
+  fill: var(--m3-surface-container-highest, #fff);
+  stroke: var(--m3-outline-variant, rgba(0, 0, 0, .15)); stroke-width: 1;
+}
+.write-ink {
+  fill: none; stroke: var(--m3-primary, var(--accent)); stroke-width: 2.4; stroke-linecap: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+}
+.write-loading:not([hidden]) .write-ink { animation: write-line .24s linear both; }
+.write-loading:not([hidden]) .write-ink:nth-of-type(2) { animation-delay: .27s; }
+.write-loading:not([hidden]) .write-ink:nth-of-type(3) { animation-delay: .52s; animation-duration: .26s; }
+.write-loading:not([hidden]) .write-ink:nth-of-type(4) { animation-delay: .8s; animation-duration: .15s; }
+.write-pen { fill: var(--m3-tertiary, #9c2f2a); }
+.write-pen-tip { fill: var(--m3-on-surface, #1e0e2e); }
+/* The pen's tip is at (0,0), so each step moves it to where the ink is being drawn. */
+.write-loading:not([hidden]) .write-pen { animation: write-pen .95s linear both; }
+
+@keyframes write-line { to { stroke-dashoffset: 0; } }
+@keyframes write-pen {
+  0%   { transform: translate(48px, 32px); }
+  25%  { transform: translate(104px, 32px); }
+  28%  { transform: translate(48px, 50px); }
+  52%  { transform: translate(96px, 50px); }
+  55%  { transform: translate(48px, 68px); }
+  80%  { transform: translate(104px, 68px); }
+  83%  { transform: translate(48px, 86px); }
+  97%  { transform: translate(80px, 86px); }
+  100% { transform: translate(92px, 74px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .write-ink { stroke-dashoffset: 0; animation: none !important; }
+  .write-pen { animation: none !important; transform: translate(80px, 86px); }
+}
+
 @keyframes ocr-split {
   0%, 18% {
     transform: none;

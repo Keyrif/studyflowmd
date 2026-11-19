@@ -337,29 +337,36 @@ function noteCard(n, recent = false) {
   return `<div class="${recent ? 'col-md-4' : 'col-md-6 col-xl-4'}"><button class="note-card glass" data-edit-note="${escapeHTML(n.id)}"><div class="note-top"><span class="note-icon">${icon('file')}</span><span class="file-type">.${n.format}</span></div><h3 translate="no">${escapeHTML(n.title)}</h3><p>${escapeHTML(preview || 'A fresh page, ready for an idea.')}</p><div class="note-bottom"><span class="subject-dot" style="--subject-color:${subjectColor(n.subject)}"></span>${escapeHTML(n.subject)}<time>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: 'numeric', month: 'short' })}</time></div></button></div>`;
 }
 // The table for one paged list, with a loading state and a "Load more" button underneath.
-function pagedFileTable(name, notes, showSubject) {
+function pagedFileTable(name, notes, showSubject, uploading = []) {
   const list = noteLists[name];
-  if (!notes.length && list.loading) return '<p class="empty">Loading notes…</p>';
+  if (!notes.length && !uploading.length && list.loading) return '<p class="empty">Loading notes…</p>';
   if (!notes.length && list.params.search) return '<p class="empty">No notes match your search.</p>';
   const more = list.hasMore
     ? `<div class="load-more"><button class="button secondary" data-load-more="${name}" ${list.loading ? 'disabled' : ''}>${list.loading ? 'Loading notes…' : 'Load more'}</button><small>${notes.length} / ${list.count}</small></div>`
     : '';
-  return fileTable(notes, showSubject) + more;
+  return fileTable(notes, showSubject, list.params.search ? [] : uploading) + more;
 }
+// Photos still being read ("Uploading file" placeholders, from ocr-preview.js).
+const pendingUploads = (subject) => (typeof uploadPlaceholders === 'function' ? uploadPlaceholders(subject) : []);
 function renderNotes() {
   const recent = [...state.notes].sort((a, b) =>
     (b.opened || b.updated).localeCompare(a.opened || a.updated),
   );
+  const uploading = pendingUploads();
+  // Placeholders come first, then the most recent notes; at least 3 cards in total.
   $('#recent-notes').innerHTML =
-    recent
-      .slice(0, 3)
-      .map((n) => noteCard(n, true))
+    // `(p) => uploadCard(p)`, not `uploadCard`: that file loads after this one, so the name must
+    // only be looked up when there actually is a placeholder to draw.
+    [...uploading.map((p) => uploadCard(p)), ...recent.map((n) => noteCard(n, true))]
+      .slice(0, Math.max(3, uploading.length))
       .join('') || '<p class="empty">Your next idea belongs here. Add a note in the library.</p>';
-  $('#all-notes').innerHTML = pagedFileTable('library', listedNotes('library'), true);
+  $('#all-notes').innerHTML = pagedFileTable('library', listedNotes('library'), true, uploading);
   if (activeSubject)
     $('#subject-files').innerHTML = pagedFileTable(
       'subject',
       listedNotes('subject').filter((n) => n.subject === activeSubject.name),
+      false,
+      pendingUploads(activeSubject.name),
     );
 }
 function render() {
@@ -437,7 +444,8 @@ function navigate() {
   }
   closeDeadlines();
 }
-function openTask(id, date) {
+// `button`: pass it to make the dialog grow out of that button (see openFromButton).
+function openTask(id, date, button) {
   $('#task-form').reset();
   const task = state.tasks.find((t) => t.id === id);
   renderColorPicker(
@@ -449,10 +457,11 @@ function openTask(id, date) {
   $('#task-subject').value = task?.subject ?? activeSubject?.name ?? state.subjects[0]?.name ?? '';
   $('#task-kind').value = task?.kind || 'Assignment';
   $('#task-dialog-title').textContent = task ? 'A little adjustment' : 'A new small step';
-  $('#task-dialog').showModal();
+  openFromButton($('#task-dialog'), button, () => $('#task-dialog').showModal());
   $('#task-title').focus();
 }
-async function openNote(id, imported) {
+// `button`: pass it to make the dialog grow out of that button (see openFromButton).
+async function openNote(id, imported, button) {
   const note = state.notes.find((n) => n.id === id) || imported;
   // Lists only carry a preview, so fetch the full text the first time a note is opened.
   if (note?.id && note.body === undefined) {
@@ -482,13 +491,14 @@ async function openNote(id, imported) {
   $('#note-subject').value = note?.subject ?? activeSubject?.name ?? state.subjects[0]?.name ?? '';
   $('#note-body').value = note?.body || '';
   $('#delete-note').hidden = !note?.id || readonly;
-  $('#note-dialog').showModal();
+  openFromButton($('#note-dialog'), button, () => $('#note-dialog').showModal());
   $('#note-title').focus();
 }
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button');
   if (!target) return;
-  if (target.hasAttribute('data-add-task')) openTask();
+  // "Add a task" (task list) and "Add event" (calendar): the dialog grows out of the button.
+  if (target.hasAttribute('data-add-task')) openTask(null, undefined, target);
   if (target.dataset.editTask) openTask(target.dataset.editTask);
   if (target.dataset.deleteTask) {
     const id = target.dataset.deleteTask;
@@ -630,8 +640,8 @@ $('#download-note').onclick = () => {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-$('#new-subject').onclick = () => openSubject();
-$('#new-note').onclick = () => openNote();
+$('#new-subject').onclick = () => openSubject(undefined, $('#new-subject'));
+$('#new-note').onclick = () => openNote(undefined, undefined, $('#new-note'));
 $('#task-filter').onchange = render;
 // Search runs on the server, a moment after typing stops, instead of on every key press.
 let searchTimer;
@@ -733,10 +743,10 @@ $$('dialog').forEach((dialog) =>
   }),
 );
 window.addEventListener('hashchange', navigate);
-function fileTable(notes, showSubject = false) {
-  if (!notes.length)
+function fileTable(notes, showSubject = false, uploading = []) {
+  if (!notes.length && !uploading.length)
     return '<p class="empty">No files yet. Add a new file or import your notes.</p>';
-  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span translate="no">${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil((n.size || 0) / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll"><table class="files-table"><thead><tr><th scope="col">Name</th>${showSubject ? '<th scope="col">Subject</th>' : ''}<th scope="col">Date modified</th><th scope="col">Type</th><th scope="col" class="file-size">Size</th></tr></thead><tbody>${uploading.map((photo) => uploadRow(photo, showSubject)).join('')}${notes.map((n) => `<tr><td><button class="file-name" data-edit-note="${escapeHTML(n.id)}">${icon('file')}<span translate="no">${escapeHTML(n.title)}.${n.format}</span></button></td>${showSubject ? `<td>${escapeHTML(n.subject || 'Unfiled')}</td>` : ''}<td>${new Date(n.updated).toLocaleDateString(uiLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${n.format === 'txt' ? 'Text document' : 'Markdown'}</td><td class="file-size">${Math.max(1, Math.ceil((n.size || 0) / 1024))} KB</td></tr>`).join('')}</tbody></table></div>`;
 }
 function updateSubjectOptions() {
   ['#task-subject', '#note-subject', '#import-subject'].forEach((selector) => {
@@ -772,7 +782,8 @@ function renderSubjects() {
         : 'Join a subject with an invitation code. It will stay here until you leave or access is revoked.') +
       '</p>';
 }
-function openSubject(id) {
+// `button`: the button that opened it, so the dialog can grow out of it (see openFromButton).
+function openSubject(id, button) {
   const subject = state.subjects.find((s) => s.id === id);
   const member = subject?.role === 'member';
   $('#subject-owner').textContent = subject?.ownerName || localUsername();
@@ -790,7 +801,7 @@ function openSubject(id) {
   $('#subject-error').textContent = '';
   $('#subject-dialog-title').textContent = subject ? 'Subject settings' : 'New subject';
   if (subject) renderAccess(subject);
-  $('#subject-dialog').showModal();
+  openFromButton($('#subject-dialog'), button, () => $('#subject-dialog').showModal());
   $('#subject-name').focus();
 }
 $('#subject-form').onsubmit = async (event) => {
@@ -950,17 +961,18 @@ $('#calendar-today').onclick = () => {
   calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   renderCalendar();
 };
-function openImport() {
+// `button`: pass it to make the dialog grow out of that button (see openFromButton).
+function openImport(button) {
   $('#import-form').reset();
   updateSubjectOptions();
   $('#import-subject').value = activeSubject?.name || state.subjects[0]?.name || '';
   $('#import-error').textContent = '';
-  $('#import-dialog').showModal();
+  openFromButton($('#import-dialog'), button, () => $('#import-dialog').showModal());
 }
-['#sidebar-import', '#open-import', '#import-library', '#folder-import'].forEach(
-  (selector) => ($(selector).onclick = openImport),
-);
-$('#folder-new').onclick = () => openNote();
+['#sidebar-import', '#open-import'].forEach((selector) => ($(selector).onclick = () => openImport()));
+// The Import buttons in the Notes library and on a subject's page use the grow effect.
+['#import-library', '#folder-import'].forEach((selector) => ($(selector).onclick = () => openImport($(selector))));
+$('#folder-new').onclick = () => openNote(undefined, undefined, $('#folder-new'));
 $('#import-form').onsubmit = async (event) => {
   event.preventDefault();
   const subject = $('#import-subject').value;
@@ -979,6 +991,7 @@ $('#import-form').onsubmit = async (event) => {
     return;
   }
   $('#import-submit').disabled = true;
+  if (typeof startWriting === 'function') startWriting();
   try {
     const drafts = await Promise.all(
       files.map(async (file) => ({
@@ -991,12 +1004,14 @@ $('#import-form').onsubmit = async (event) => {
     const notes = await Promise.all(
       drafts.map((draft) => api('/api/notes/', { method: 'POST', body: noteToApi(draft) })),
     );
+    if (typeof finishWriting === 'function') await finishWriting();
     notes.forEach((n) => showNewNote(rememberNote(noteFromApi(n))));
     render();
     refreshNoteCounts();
     closeDialog($('#import-dialog'));
     toast(`${notes.length} file${notes.length === 1 ? '' : 's'} imported.`);
   } catch (error) {
+    if (typeof stopWriting === 'function') stopWriting();
     $('#import-error').textContent = error.message || 'A file could not be read. Try again.';
   } finally {
     $('#import-submit').disabled = false;
@@ -1129,8 +1144,75 @@ function animateOut(element, finish) {
     })
     .catch(() => {});
 }
+/* ---------- Container transform ("grow from the button") ----------
+   A dialog opened with openFromButton() doesn't pop up in the middle: it grows out of the
+   button that opened it, taking over its position, size, shape and color, and closing
+   shrinks it back into that button. Only the dialog's box is stretched; its contents fade
+   in once it's nearly full size, so text is never seen squashed. */
+const dialogOrigins = new WeakMap();
+const springSoft = () =>
+  getComputedStyle(document.documentElement).getPropertyValue('--spring-soft').trim() || 'cubic-bezier(.2,.9,.25,1)';
+
+// Where the button sits, expressed as a transform of the dialog's final box.
+function morphFrame(dialog, button) {
+  const end = dialog.getBoundingClientRect();
+  const start = button.getBoundingClientRect();
+  const sx = start.width / end.width;
+  const sy = start.height / end.height;
+  const radius = parseFloat(getComputedStyle(button).borderTopLeftRadius) || 0;
+  return {
+    transformOrigin: 'top left',
+    transform: `translate(${start.left - end.left}px, ${start.top - end.top}px) scale(${sx}, ${sy})`,
+    // Corners are scaled too, so pre-stretch them to look like the button's pill shape.
+    borderRadius: `${radius / sx}px / ${radius / sy}px`,
+    backgroundColor: getComputedStyle(button).backgroundColor,
+  };
+}
+
+function openFromButton(dialog, button, open) {
+  const canMorph = motionEnabled() && dialog.animate && button?.getClientRects().length;
+  if (!canMorph) return open();
+  dialog.style.animation = 'none'; // replace the usual pop-in
+  open();
+  const style = getComputedStyle(dialog);
+  const finalLook = { transformOrigin: 'top left', transform: 'none', borderRadius: style.borderRadius, backgroundColor: style.backgroundColor };
+  dialog.animate([morphFrame(dialog, button), finalLook], { duration: 560, easing: springSoft() });
+  [...dialog.children].forEach((child) =>
+    child.animate([{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }], { duration: 560, easing: 'ease-out' }),
+  );
+  dialog.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, pseudoElement: '::backdrop' });
+  dialogOrigins.set(dialog, button);
+}
+
 function closeDialog(dialog) {
-  if (dialog.open) animateOut(dialog, () => dialog.close());
+  if (!dialog.open) return;
+  const button = dialogOrigins.get(dialog);
+  dialogOrigins.delete(dialog);
+  const finish = () => {
+    dialog.close();
+    dialog.style.animation = '';
+  };
+  // Opened from a button that's still on screen: shrink back into it.
+  if (button && motionEnabled() && button.getClientRects().length && !closingAnimations.has(dialog)) {
+    const style = getComputedStyle(dialog);
+    const current = { transformOrigin: 'top left', transform: 'none', borderRadius: style.borderRadius, backgroundColor: style.backgroundColor };
+    const shrink = dialog.animate([current, morphFrame(dialog, button)], { duration: 380, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    [...dialog.children].forEach((child) =>
+      child.animate([{ opacity: 1 }, { opacity: 0, offset: 0.4 }, { opacity: 0 }], { duration: 380, fill: 'forwards' }),
+    );
+    dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, pseudoElement: '::backdrop', fill: 'forwards' });
+    closingAnimations.set(dialog, shrink);
+    shrink.finished
+      .then(() => {
+        finish();
+        dialog.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
+        closingAnimations.delete(dialog);
+      })
+      .catch(() => {});
+    return;
+  }
+  dialog.style.animation = '';
+  animateOut(dialog, () => dialog.close());
 }
 function hidePanel(panel) {
   if (!panel.hidden) animateOut(panel, () => (panel.hidden = true));
@@ -1212,7 +1294,7 @@ $('#folder-settings').onclick = () => {
 $('#join-subject').onclick = () => {
   $('#join-code').value = '';
   $('#join-error').textContent = '';
-  $('#join-dialog').showModal();
+  openFromButton($('#join-dialog'), $('#join-subject'), () => $('#join-dialog').showModal());
   $('#join-code').focus();
 };
 $('#join-form').onsubmit = async (event) => {

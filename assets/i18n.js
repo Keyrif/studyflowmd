@@ -311,6 +311,9 @@ const I18N_RO = {
   'Turn on': 'Pornește',
   'Turn off': 'Oprește',
   'just now': 'acum',
+  'Uploading file': 'Se încarcă fișierul',
+  'Importing your files': 'Se importă fișierele',
+  'Couldn’t read this photo': 'Fotografia nu a putut fi citită',
 };
 
 const I18N_EN = {

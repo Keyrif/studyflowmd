@@ -1,0 +1,35 @@
+/* "Uploading file" placeholders: shown where a note will appear while its photo is being read. */
+
+.upload-card { padding: 22px; min-height: 235px; display: flex; flex-direction: column; }
+.upload-card h3 { font-size: calc(13px * var(--font-scale, 1)); font-weight: 600; margin: 0 0 7px; overflow-wrap: anywhere; }
+.upload-card .upload-bar { margin-top: auto; }
+
+.upload-label {
+  font-size: calc(10px * var(--font-scale, 1)); font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--m3-primary, var(--accent));
+  animation: upload-pulse 1.6s ease-in-out infinite;
+}
+.failed .upload-label { color: var(--m3-error, #b3261e); animation: none; }
+
+/* The progress bar: a track with a filled part that grows. */
+.upload-bar {
+  display: block; position: relative; height: 6px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--m3-primary, var(--accent)) 18%, transparent);
+}
+.upload-bar > span {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--m3-primary, var(--accent));
+  transition: width .3s linear;
+}
+.upload-bar.failed > span { background: var(--m3-error, #b3261e); }
+
+.upload-row td { height: 48px; }
+.upload-name { color: var(--muted); cursor: default; }
+.upload-name svg { color: var(--m3-primary, var(--accent)); }
+.upload-status { display: flex; align-items: center; gap: 14px; }
+.upload-status .upload-bar { flex: 1; max-width: 320px; }
+
+@keyframes upload-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .upload-label { animation: none; } }
+
+[data-theme="cs"] .upload-bar, [data-theme="cs"] .upload-bar > span { border-radius: 0; }

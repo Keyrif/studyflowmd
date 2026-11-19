@@ -23,15 +23,18 @@ MAX_IMAGES_PER_UPLOAD = 10
 def ocr_job_data(job):
     """What the browser needs to show progress: status, counts, and the notes made so far."""
     job.refresh_from_db(fields=['status', 'error'])
-    photos = list(job.photos.values_list('state', 'note_id'))
+    photos = list(job.photos.values_list('name', 'state', 'note_id'))
     return {
         'id': str(job.id),
         'status': job.status,
         'error': job.error,
+        'subject': job.subject_id,
         'total': len(photos),
-        'done': sum(1 for state, _ in photos if state == OcrPhoto.DONE),
-        'failed': sum(1 for state, _ in photos if state == OcrPhoto.FAILED),
-        'notes': [note_id for state, note_id in photos if state == OcrPhoto.DONE and note_id],
+        'done': sum(1 for _, state, _ in photos if state == OcrPhoto.DONE),
+        'failed': sum(1 for _, state, _ in photos if state == OcrPhoto.FAILED),
+        'notes': [note_id for _, state, note_id in photos if state == OcrPhoto.DONE and note_id],
+        # One entry per photo, so the page can show an "Uploading file" placeholder for each.
+        'photos': [{'name': name, 'state': state, 'note': note_id} for name, state, note_id in photos],
     }
 
 

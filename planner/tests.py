@@ -300,6 +300,13 @@ class OcrUploadTests(PlannerTestCase):
         job = self.job(self.upload(*[photo(f'p{i}.png') for i in range(10)]))
         self.assertEqual((job['status'], job['done'], job['failed'], len(job['notes'])), ('done', 10, 0, 10))
 
+    def test_status_lists_each_photo_for_the_upload_placeholders(self):
+        response, _ = self.queue_only(photo('page 1.png'), photo('page 2.png'))
+        self.assertEqual(self.job(response)['photos'], [
+            {'name': 'page 1.png', 'state': 'queued', 'note': None},
+            {'name': 'page 2.png', 'state': 'queued', 'note': None},
+        ])
+
     def test_each_photo_becomes_a_tidy_markdown_note(self):
         response = self.upload(photo('lecture 1.png'), photo('lecture 2.jpg', image_format='JPEG'),
                                subject=self.subject.id)
