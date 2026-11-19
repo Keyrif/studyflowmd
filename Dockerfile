@@ -33,4 +33,7 @@ COPY . .
 FROM base AS app
 COPY . .
 EXPOSE 8000
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+# --insecure: keep serving the files in assets/ (JS, CSS, fonts) when DEBUG is off. Without
+# it, runserver stops serving them in production and the page loads without any styling.
+# Fine for a small number of users; a bigger deployment would let nginx serve assets/.
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver --insecure 0.0.0.0:8000"]

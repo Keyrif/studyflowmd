@@ -314,8 +314,8 @@ const I18N_RO = {
   'Menu': 'Meniu',
   "What's in the photos?": 'Ce e în poze?',
   Math: 'Matematică',
-  'Each line of maths becomes a formula. Works best on printed maths, photographed straight on.':
-    'Fiecare rând de matematică devine o formulă. Merge cel mai bine pe matematică tipărită, fotografiată drept.',
+  'Lines of text stay text, lines of maths become formulas. Works best on printed maths, photographed straight on.':
+    'Rândurile de text rămân text, cele de matematică devin formule. Merge cel mai bine pe matematică tipărită, fotografiată drept.',
   'Choose text or math photos.': 'Alege poze cu text sau cu matematică.',
   'Math recognition is not installed on the server yet.': 'Recunoașterea matematicii nu e instalată încă pe server.',
   'Nothing to preview yet.': 'Nimic de previzualizat încă.',

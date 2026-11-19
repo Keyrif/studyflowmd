@@ -48,6 +48,13 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 X_FRAME_OPTIONS = 'DENY'
 
+# On the server, nginx handles HTTPS and passes requests on to Django over plain HTTP.
+# nginx adds "X-Forwarded-Proto: https" to say the visitor really used HTTPS; trusting it
+# lets Django treat those requests as secure (secure cookies, CSRF origin checks).
+# Safe because Django's port 8000 is only reachable from the machine itself (compose.yaml),
+# so nobody outside can send that header straight to Django.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Content Security Policy: the browser only runs scripts and loads files from the sources
 # listed here. If an XSS bug ever slipped through (user text inserted without escaping), the
 # injected script would simply not run. It is a second lock behind escapeHTML().

@@ -87,8 +87,9 @@ const mdk = (source) => withKatex.renderMarkdown(source);
 test('with KaTeX, formulas are drawn', () => {
   assert.match(mdk('$x^2$'), /class="katex"/);
   assert.match(mdk('$$\n\\lim_{x\\to 0} \\frac{\\sin x}{x} = 1\n$$'), /<div class="md-math"><span class="katex-display">/);
-  // Broken LaTeX shows in red instead of breaking the whole note.
-  assert.match(mdk('$$\\frac{1}{$$'), /katex-error|class="katex/);
+  // LaTeX KaTeX can't understand shows as plain code, not as red error text.
+  assert.equal(mdk('$$\\frac{1}{$$'), '<pre><code>$$\\frac{1}{$$</code></pre>');
+  assert.equal(mdk('see $\\notacommand{x}$ here'), '<p>see <code>$\\notacommand{x}$</code> here</p>');
 });
 
 test('with KaTeX, formulas cannot inject links or HTML', () => {

@@ -16,7 +16,7 @@ const currentImportMode = () => importMode;
 const ocrKind = () => document.querySelector('input[name="ocr-kind"]:checked')?.value || 'text';
 const OCR_KIND_HELP = {
   text: 'Up to 10 JPG, PNG or WebP photos, 10 MB each. Each photo becomes a Markdown note.',
-  math: 'Each line of maths becomes a formula. Works best on printed maths, photographed straight on.',
+  math: 'Lines of text stay text, lines of maths become formulas. Works best on printed maths, photographed straight on.',
 };
 function updateOcrKindHelp() {
   const help = document.getElementById('ocr-kind-help');

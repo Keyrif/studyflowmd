@@ -19,12 +19,13 @@ function mdEscape(text) {
 
 // A formula, drawn by KaTeX (assets/vendor/katex) like in Obsidian: $inline$ or $$display$$.
 // KaTeX escapes everything it outputs and, with trust: false, refuses commands that could add
-// links or HTML. Without KaTeX (or for broken LaTeX) the formula's source is shown as code.
+// links or HTML. Without KaTeX, or for LaTeX it can't understand (a misread photo, a typo),
+// the formula's source is shown as a calm grey code block instead of a wall of red text.
 function mdMath(tex, display) {
   if (typeof katex !== 'undefined') {
     try {
       const html = katex.renderToString(tex, {
-        displayMode: display, throwOnError: false, trust: false, strict: 'ignore',
+        displayMode: display, throwOnError: true, trust: false, strict: 'ignore',
         maxSize: 20, maxExpand: 500, output: 'htmlAndMathml',
       });
       return display ? `<div class="md-math">${html}</div>` : html;

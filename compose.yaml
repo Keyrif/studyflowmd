@@ -77,6 +77,7 @@ services:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379
       MATH_THREADS: "2"  # CPU cores one formula may use
+      OMP_THREAD_LIMIT: "1"  # Tesseract (used for the lines of text) on a single core
 
   # The clock: puts scheduled jobs into the queue (daily reminders, hourly cleanup).
   # There must only ever be one, or every scheduled job would be queued twice.

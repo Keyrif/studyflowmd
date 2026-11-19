@@ -17,7 +17,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 from rest_framework.test import APITestCase
 
 from django.test import override_settings
@@ -465,17 +465,40 @@ class RealTesseractTests(PlannerTestCase):
         self.assertIn('lecture', body)
 
 
+STROKES = range(100, 901, 12)  # x positions of the pen strokes that stand in for writing
+
+
 def maths_page(rows, size=(1200, 900)):
-    """A white page with black bars standing in for lines of maths.
+    """A white page with pen-like strokes standing in for lines of maths.
 
     `rows` are (top, height) pairs, so tests control exactly where the "ink" is, including
-    the small gaps inside a fraction.
+    the small gaps inside a fraction. A line is a row of thin vertical strokes (like letters);
+    a (top, height, 'bar') row is a short horizontal fraction bar instead.
     """
     image = Image.new('L', size, 255)
     draw = ImageDraw.Draw(image)
-    for top, height in rows:
-        draw.rectangle((100, top, 900, top + height - 1), fill=0)
+    for top, height, *kind in rows:
+        if kind == ['bar']:
+            draw.rectangle((100, top, 400, top + height - 1), fill=0)
+        else:
+            for x in STROKES:
+                draw.rectangle((x, top, x + 2, top + height - 1), fill=0)
     return image
+
+
+def phone_photo(rows, size=(1200, 900)):
+    """The same page as a phone would see it: a notebook's printed lines across the page,
+    a margin line, a shadow darkening one side, and JPEG blur."""
+    page = maths_page(rows, size)
+    draw = ImageDraw.Draw(page)
+    for y in range(25, size[1], 52):                      # ruled lines, light grey
+        draw.line((0, y, size[0], y), fill=170, width=2)
+    draw.line((70, 0, 70, size[1]), fill=150, width=2)    # margin line
+    shadow = Image.linear_gradient('L').rotate(90, expand=True).resize(size)  # dark on one side
+    page = ImageChops.multiply(page, shadow.point(lambda v: 110 + v * 145 // 255))
+    buffer = io.BytesIO()
+    page.convert('RGB').save(buffer, 'JPEG', quality=70)
+    return Image.open(io.BytesIO(buffer.getvalue())).convert('L')
 
 
 def png(image, name='maths.png'):
@@ -487,17 +510,40 @@ def png(image, name='maths.png'):
 class MathLineSplitTests(PlannerTestCase):
     """Cutting a photo of maths into one image per line, before pix2tex reads each line."""
 
-    def heights(self, rows, **kwargs):
+    def heights(self, rows, page=maths_page, **kwargs):
         from .math_ocr import split_lines
-        return [line.height - 2 * 12 for line in split_lines(maths_page(rows, **kwargs))]  # minus the white margin
+        return [line.height - 2 * 12 for line in split_lines(page(rows, **kwargs))]  # minus the white margin
 
     def test_ten_lines_become_ten_images_top_to_bottom(self):
         self.assertEqual(self.heights([(40 + i * 80, 40) for i in range(10)]), [40] * 10)
 
     def test_a_fraction_stays_one_line(self):
         # numerator, bar, denominator, with small white gaps between them, then a normal line
-        fraction = [(100, 30), (136, 4), (146, 30)]
+        fraction = [(100, 30), (136, 4, 'bar'), (146, 30)]
         self.assertEqual(self.heights([(40, 40), *fraction, (260, 40)]), [40, 76, 40])
+
+    def test_a_phone_photo_with_shadow_and_ruled_lines_splits_like_a_clean_page(self):
+        rows = [(60 + i * 104, 40) for i in range(8)]
+        found = self.heights(rows, page=phone_photo)
+        self.assertEqual(len(found), 8)  # the printed lines neither glue lines together nor become lines
+        for height in found:
+            self.assertAlmostEqual(height, 40, delta=4)  # JPEG blur may add a pixel or two
+
+    def test_a_slightly_tilted_notebook_line_is_not_glued_to_the_writing(self):
+        page = maths_page([(60, 40), (160, 40)])
+        # A printed line drifting 8 px down across the page, just below the first line of writing.
+        ImageDraw.Draw(page).line((0, 124, 1200, 132), fill=150, width=2)
+        from .math_ocr import split_lines
+        self.assertEqual([line.height - 24 for line in split_lines(page)], [40, 40])
+
+    def test_the_shadow_is_gone_from_the_cut_out_lines(self):
+        from .math_ocr import split_lines
+        line = split_lines(phone_photo([(60, 40)]))[0]
+        # The crop starts 12 px (the margin) left of the first stroke, at x = 100, in the
+        # darkest part of the shadow. Between the first two strokes (x = 100-102 and 112-114)
+        # there is only paper: it must come out pure white, while the stroke stays dark.
+        self.assertEqual(line.getpixel((12 + 7, 12 + 10)), 255)
+        self.assertLess(line.getpixel((12 + 1, 12 + 10)), 128)
 
     def test_an_exponent_above_its_line_is_kept_with_it(self):
         self.assertEqual(self.heights([(100, 14), (118, 40), (240, 40)]), [58, 40])
@@ -509,12 +555,18 @@ class MathLineSplitTests(PlannerTestCase):
     def test_each_line_is_trimmed_to_its_writing_with_a_white_margin(self):
         from .math_ocr import split_lines
         line = split_lines(maths_page([(100, 40)]))[0]
-        self.assertEqual(line.size, (801 + 24, 40 + 24))  # the bar spans x = 100..900, both included
+        writing_width = STROKES[-1] + 3 - STROKES[0]  # first stroke's left edge to last stroke's right edge
+        self.assertEqual(line.size, (writing_width + 24, 40 + 24))
         self.assertEqual(line.getpixel((0, 0)), 255)
 
     def test_very_long_pages_are_cut_off(self):
         from .math_ocr import MAX_LINES
         self.assertEqual(len(self.heights([(10 + i * 30, 15) for i in range(60)], size=(1200, 1900))), MAX_LINES)
+
+
+def tesseract_words(*words):
+    """What pytesseract.image_to_data returns: every word with its confidence (0-100)."""
+    return {'text': [word for word, _ in words], 'conf': [conf for _, conf in words]}
 
 
 class FakeLatexModel:
@@ -538,10 +590,47 @@ class MathUploadTests(PlannerTestCase):
         patcher = mock.patch('planner.math_ocr.get_model', return_value=self.model)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # Tesseract's per-line answer for the hybrid; by default it finds no words, so every
+        # line is treated as maths. Tests that need a text line change this.
+        patcher = mock.patch('planner.math_ocr.pytesseract.image_to_data', return_value=tesseract_words())
+        self.tesseract = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def upload(self, *files, **extra):
         with self.captureOnCommitCallbacks(execute=True):
             return self.client.post('/api/notes/ocr/', {'images': list(files), **extra}, format='multipart')
+
+    def body(self, response):
+        job = self.client.get(f"/api/notes/ocr/{response.data['id']}/").data
+        return Note.objects.get(pk=job['notes'][0]).body
+
+    def test_lines_of_text_stay_text_and_formulas_become_latex(self):
+        # The hybrid: Tesseract is sure about the first line and it looks like words.
+        self.tesseract.side_effect = [tesseract_words(('Exercise', 96), ('9.', 91), ('Let', 94)),
+                                      tesseract_words(('lim', 52), ('x2→', 23)),
+                                      tesseract_words()]
+        body = self.body(self.upload(png(maths_page([(40, 40), (120, 40), (200, 40)])), mode='math'))
+        self.assertEqual(body, 'Exercise 9. Let\n\n$$\nx_1^2\n$$\n\n$$\nx_2^2\n$$')
+        self.assertEqual(len(self.model.lines), 2)  # the text line never reached pix2tex
+
+    def test_confident_but_maths_looking_lines_still_go_to_pix2tex(self):
+        # Tesseract can be sure of itself and still wrong about maths: "x2+3x=5" isn't prose.
+        self.tesseract.return_value = tesseract_words(('f(x)=x2+3x-5', 90), ('ok', 95))
+        body = self.body(self.upload(png(maths_page([(40, 40)])), mode='math'))
+        self.assertEqual(body, '$$\nx_1^2\n$$')
+
+    def test_garbled_output_is_marked_unreadable_instead_of_kept(self):
+        self.model = mock.Mock(return_value='\\left(' + '\\alpha\\beta-' * 20 + '\\right)')
+        with mock.patch('planner.math_ocr.get_model', return_value=self.model):
+            body = self.body(self.upload(png(maths_page([(40, 40)])), mode='math'))
+        self.assertEqual(body, '_(This line could not be read.)_')
+
+    def test_real_formulas_are_not_mistaken_for_garbage(self):
+        from .math_ocr import looks_garbled
+        for latex in [r'\operatorname*{lim}_{x\to0}{\frac{\sin x}{x}}=1', r'f(x)=x^{2}+3x-5',
+                      r'\int_{0}^{1}x^{2}\,dx=\frac{1}{3}', r'\sum_{k=1}^{n}k=\frac{n(n+1)}{2}',
+                      r'\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}=\begin{pmatrix}ax+by\\cx+dy\end{pmatrix}']:
+            self.assertFalse(looks_garbled(latex), latex)
 
     def test_each_line_of_maths_becomes_a_formula_block(self):
         response = self.upload(png(maths_page([(40 + i * 80, 40) for i in range(3)])), mode='math')
